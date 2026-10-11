@@ -1,4 +1,3 @@
-import type { TrackId } from '../audio/dsp/synth';
 
 export type GoalId = 'calm' | 'urge' | 'relax' | 'sleep' | 'focus';
 
@@ -14,8 +13,9 @@ export interface Goal {
   /** CSS accent variable name suffix. */
   accent: string;
   badges: Badge[];
-  sounds: TrackId[];
-  defaultSound: TrackId;
+  /** Suggested sound ids from src/music/catalog.ts. */
+  sounds: string[];
+  defaultSound: string;
   breathing: boolean;
   minutes: number;
 }
@@ -31,8 +31,8 @@ export const GOALS: Goal[] = [
       { label: 'Music', evidence: 'music' },
       { label: 'Beats', evidence: 'beats-anger' },
     ],
-    sounds: ['drift', 'hush', 'rain', 'brown'],
-    defaultSound: 'drift',
+    sounds: ['piece:satie-gym-1', 'piece:bach-prel-c', 'aurora', 'strings', 'rain'],
+    defaultSound: 'piece:satie-gym-1',
     breathing: true,
     minutes: 10,
   },
@@ -46,8 +46,8 @@ export const GOALS: Goal[] = [
       { label: 'Movement', evidence: 'movement' },
       { label: 'Beats', evidence: 'beats-urge' },
     ],
-    sounds: ['hush', 'rain', 'brown', 'drift'],
-    defaultSound: 'hush',
+    sounds: ['aurora', 'hush', 'rain', 'brown', 'lofi'],
+    defaultSound: 'aurora',
     breathing: true,
     minutes: 15,
   },
@@ -61,8 +61,8 @@ export const GOALS: Goal[] = [
       { label: 'Breathing', evidence: 'breathing' },
       { label: 'Beats', evidence: 'beats-relax' },
     ],
-    sounds: ['drift', 'hush', 'rain', 'pink', 'brown'],
-    defaultSound: 'drift',
+    sounds: ['piece:chopin-noct-9-2', 'piece:debussy-clair', 'reverie', 'lofi', 'strings'],
+    defaultSound: 'piece:chopin-noct-9-2',
     breathing: true,
     minutes: 20,
   },
@@ -76,8 +76,8 @@ export const GOALS: Goal[] = [
       { label: 'Music', evidence: 'bedtime-music' },
       { label: 'Beats', evidence: 'beats-sleep' },
     ],
-    sounds: ['hush', 'rain', 'brown', 'drift', 'pink'],
-    defaultSound: 'hush',
+    sounds: ['reverie', 'piece:satie-gym-1', 'lullaby', 'hush', 'rain'],
+    defaultSound: 'reverie',
     breathing: true,
     minutes: 25,
   },
@@ -90,8 +90,8 @@ export const GOALS: Goal[] = [
       { label: 'Steady sound', evidence: 'low-distraction' },
       { label: 'Beats', evidence: 'beats-focus' },
     ],
-    sounds: ['brown', 'pink', 'rain', 'hush'],
-    defaultSound: 'brown',
+    sounds: ['lofi', 'piece:bach-prel-c', 'brown', 'rain', 'pink'],
+    defaultSound: 'lofi',
     breathing: false,
     minutes: 25,
   },

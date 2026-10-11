@@ -17,6 +17,11 @@ export interface Settings {
   assumedDb: number;
   /** Last sound picked per goal. */
   lastSound: Record<string, string>;
+  /** Add the experimental beat layer automatically (not in Calm down / Ride an urge). */
+  autoBeats: boolean;
+  beatMode: 'binaural' | 'pulse';
+  /** Show the instrument animation or the breathing circle. */
+  visual: 'instrument' | 'circle';
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -29,6 +34,9 @@ export const DEFAULT_SETTINGS: Settings = {
   headphones: { lr: null, mono: null, at: null },
   assumedDb: 83,
   lastSound: {},
+  autoBeats: true,
+  beatMode: 'binaural',
+  visual: 'instrument',
 };
 
 export const settings = signal<Settings>(DEFAULT_SETTINGS);

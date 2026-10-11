@@ -9,9 +9,11 @@ It brings together the best-supported self-help methods for five goals: **calm d
 ## What's in it
 
 - **Guided flows**: Calm down (step away, then breathing, then calm music), Ride an urge (15-minute urge-surfing timer with prompts and check-ins), Relax, Sleep wind-down (fades out on its own), Focus blocks, Breathe practice (slow breathing or cyclic sighing), Movement break.
-- **Sound engine**: generative music and noise (made by the app's own code), or your own file (decoded locally, never uploaded). Breathing swell, loudness normalized to −20 LUFS, true-peak limiter at −1 dBTP, WAV export.
+- **Music library**: 16 classical piano pieces (Chopin nocturnes and preludes, Satie, Debussy, Bach) played from free scores on a real upright-piano sound, an endless generated piano piece, lo-fi chill, ambient pads, warm strings, a music box, rain and noise, or your own file (decoded locally, never uploaded).
+- **Animations**: a piano with notes drifting onto softly glowing keys, or four gently vibrating strings, synced to the notes. Slow, no flashing.
+- **Sound engine**: breathing swell, loudness normalized to −20 LUFS, true-peak limiter, WAV export. Breathing swell, loudness normalized to −20 LUFS, true-peak limiter at −1 dBTP, WAV export.
 - **Experiment Lab**: test one part at a time (binaural beat vs sham, pulse vs sham, breathing guide on/off, sound A vs B). Locked plan, hidden randomized blocks of 4 (ABBA/BAAB), before/after ratings, optional 2-minute reaction-time test, condition guesses, results only at the end: paired difference with 95% CI, permutation test, blinding accuracy and a plain verdict.
-- **Rhythm layer (experimental, off by default)**: power-matched pulse (works on speakers) or binaural carriers (headphones). Not offered in the Calm and Urge flows.
+- **Beats (experimental)**: binaural (headphones) or a power-matched pulse (speakers), added automatically in Relax, Sleep, Focus and Breathe (the owner's choice; switch off in Settings) and tuned to the key of the music. Never in Calm down or Ride an urge.
 - **Works offline** as a PWA.
 - **Evidence badges** on every goal, with "Why?" pages that include null and negative results. Myths page.
 - **Safety**: first-run safety screen, left/right and stereo checks, level calibration, help lines, weekly listening log, gentle nudges toward real support. Nothing flashes.

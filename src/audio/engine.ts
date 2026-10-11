@@ -8,6 +8,9 @@ import type { WorkerIn, WorkerOut } from './worker';
 import type { MixParams, SessionTiming } from './dsp/mixer';
 import type { TrackId } from './dsp/synth';
 import { db } from '../data/db';
+import type { SampleRegion } from './dsp/sampler';
+import { SOUND_BY_ID } from '../music/catalog';
+import { buildScore, type BuiltScore, type VisualNote } from '../music/score';
 
 export type EngineStatus = 'idle' | 'preparing' | 'playing' | 'stopping';
 
@@ -17,7 +20,7 @@ export const preparingLabel = signal('');
 export const limiterGain = signal(1);
 export const audioError = signal<string | null>(null);
 
-const TRACK_CACHE_VERSION = 3;
+const TRACK_CACHE_VERSION = 4;
 
 let ctx: AudioContext | null = null;
 let node: AudioWorkletNode | null = null;
@@ -27,6 +30,11 @@ const pending = new Map<number, { resolve: (m: WorkerOut) => void; reject: (e: E
 /** Main-thread copies of loaded buffers (for export), by key. */
 const buffers = new Map<string, { left: Float32Array; right: Float32Array }>();
 const loadedInWorklet = new Set<string>();
+let regions: SampleRegion[] | null = null;
+let regionsPromise: Promise<SampleRegion[]> | null = null;
+const scores = new Map<string, BuiltScore>();
+const trackEvents = new Map<string, VisualNote[]>();
+let musicClock = { time: 0, at: 0 };
 let startedAt = 0;
 let latency = 0;
 let onEnded: (() => void) | null = null;
@@ -89,6 +97,7 @@ function onWorklet(m: WorkletOut) {
     latency = m.latency;
   } else if (m.type === 'tick') {
     limiterGain.value = m.limiter;
+    musicClock = { time: m.musicTime, at: m.at };
   } else if (m.type === 'ended') {
     status.value = 'idle';
     clearMediaSession();
@@ -123,20 +132,92 @@ export async function loadTrack(id: TrackId): Promise<string> {
   const key = `track:${id}:${rate}`;
   if (!buffers.has(key)) {
     const cacheKey = `${key}:v${TRACK_CACHE_VERSION}`;
-    let cached: { left: Float32Array; right: Float32Array } | undefined;
+    let cached: { left: Float32Array; right: Float32Array; events?: VisualNote[] } | undefined;
     try { cached = await db.get('cache', cacheKey); } catch { /* no storage */ }
     if (cached) {
       buffers.set(key, cached);
+      trackEvents.set(key, cached.events ?? []);
     } else {
       const m = await call({ type: 'track', track: id, rate });
       if (m.type !== 'track') throw new Error('Unexpected worker reply');
-      const b = { left: m.left, right: m.right };
+      const b = { left: m.left, right: m.right, events: m.events };
       buffers.set(key, b);
+      trackEvents.set(key, m.events);
       db.put('cache', b, cacheKey).catch(() => {});
     }
   }
   await sendToWorklet(key);
   return key;
+}
+
+/** Load and decode the piano samples once (CC0 FreePats Upright Piano KW). */
+export async function loadPianoBank(): Promise<SampleRegion[]> {
+  if (regions) return regions;
+  if (!regionsPromise) {
+    regionsPromise = (async () => {
+      const ac = await ensureAudio();
+      const base = new URL('samples/piano-kw/', document.baseURI);
+      const bank = await (await fetch(new URL('bank.json', base))).json() as { regions: { lo: number; hi: number; center: number; file: string; loopStart?: number; loopEnd?: number }[] };
+      const decoded = new Map<string, AudioBuffer>();
+      await Promise.all([...new Set(bank.regions.map((r) => r.file))].map(async (f) => {
+        const data = await (await fetch(new URL(f, base))).arrayBuffer();
+        decoded.set(f, await ac.decodeAudioData(data));
+      }));
+      const out: SampleRegion[] = bank.regions.map((r) => {
+        const buf = decoded.get(r.file)!;
+        const ratio = buf.sampleRate / 44100;
+        return {
+          lo: r.lo, hi: r.hi, center: r.center, rate: buf.sampleRate, data: buf.getChannelData(0).slice(),
+          loopStart: r.loopStart !== undefined ? Math.round(r.loopStart * ratio) : undefined,
+          loopEnd: r.loopEnd !== undefined ? Math.round(r.loopEnd * ratio) : undefined,
+        };
+      });
+      const copies = out.map((r) => ({ ...r, data: r.data.slice() }));
+      post({ type: 'bank', regions: copies }, copies.map((r) => r.data.buffer));
+      regions = out;
+      return out;
+    })();
+  }
+  return regionsPromise;
+}
+
+async function loadMidiFile(file: string): Promise<Uint8Array> {
+  const res = await fetch(new URL(`music/midi/${file}`, document.baseURI));
+  if (!res.ok) throw new Error(`Could not load ${file}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+export interface LoadedSound {
+  key: string;
+  /** Notes for the animation, and the loop length they repeat over. */
+  visual: { notes: VisualNote[]; length: number; parts?: BuiltScore['parts'] } | null;
+}
+
+/** Load any sound from the library (generated buffer or piano score). */
+export async function loadSound(id: string): Promise<LoadedSound> {
+  const item = SOUND_BY_ID[id];
+  if (!item) throw new Error(`Unknown sound ${id}`);
+  if (item.kind === 'buffer') {
+    const key = await loadTrack(item.track!);
+    const b = buffers.get(key)!;
+    return { key, visual: { notes: trackEvents.get(key) ?? [], length: b.left.length / sampleRate() } };
+  }
+  await loadPianoBank();
+  const key = `score:${id}`;
+  let sc = scores.get(key);
+  if (!sc) {
+    sc = await buildScore(id, loadMidiFile);
+    scores.set(key, sc);
+    post({ type: 'score', key, notes: sc.notes, length: sc.length });
+  }
+  return { key, visual: { notes: sc.visual, length: sc.length, parts: sc.parts } };
+}
+
+/** Playback position inside the current music, seconds (as heard). */
+export function musicTime(): number {
+  if (!ctx || status.value === 'idle') return 0;
+  const out = (ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0;
+  return Math.max(0, musicClock.time + (ctx.currentTime - musicClock.at) - latency - out - ctx.baseLatency);
 }
 
 export interface UploadInfo {
@@ -176,6 +257,7 @@ export async function startSession(o: StartOptions): Promise<void> {
   limiterGain.value = 1;
   onEnded = o.onEnded ?? null;
   startedAt = ctx!.currentTime + 10; // until the worklet reports
+  musicClock = { time: 0, at: ctx!.currentTime + 10 };
   post({ type: 'start', params: o.params, timing: o.timing, music: o.music, noise: o.noise });
   status.value = 'playing';
   setMediaSession(o.title);
@@ -254,6 +336,7 @@ export async function exportWav(o: ExportOptions): Promise<Blob> {
       params: o.params,
       timing: o.timing,
       music: o.music ? buffers.get(o.music) ?? null : null,
+      score: o.music && scores.has(o.music) && regions ? { regions, notes: scores.get(o.music)!.notes, length: scores.get(o.music)!.length } : undefined,
       noise: o.noise ? buffers.get(o.noise) ?? null : null,
     },
     [],

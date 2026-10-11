@@ -1,7 +1,9 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import * as engine from '../audio/engine';
-import { TRACKS, type TrackId } from '../audio/dsp/synth';
+import type { TrackId } from '../audio/dsp/synth';
+import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
+import { InstrumentView, type Timeline } from './Instrument';
 import { breathAt, patternFor, BPM_MIN, BPM_MAX, type BreathPattern, type BreathPhase } from '../audio/dsp/breath';
 import { DEFAULT_PARAMS, type MixParams, type SessionTiming } from '../audio/dsp/mixer';
 import { settings, updateSettings } from '../data/settings';
@@ -9,12 +11,13 @@ import { recordSession } from '../data/usage';
 import { db } from '../data/db';
 import { Icon, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
 
-export type SoundChoice = TrackId | 'upload' | 'none';
+export type SoundChoice = string; // a sound id from the library, 'upload' or 'none'
 
 export interface PlayerProps {
   goalId: string;
   title: string;
-  sounds: TrackId[];
+  /** Suggested sound ids (shown as quick picks). */
+  sounds: string[];
   defaultSound: SoundChoice;
   minutes: number;
   minuteOptions: number[];
@@ -101,9 +104,23 @@ export function timingFor(minutes: number, sleep?: boolean): SessionTiming {
   return { duration, fadeIn: 4, fadeOut: sleep ? Math.max(60, duration - 5 * 60) : 8 };
 }
 
+/** The beat layer the app adds automatically for this goal and music (or off). */
+export function autoRhythm(goalId: string, soundId: string): RhythmSettings {
+  const s = settings.value;
+  const off: RhythmSettings = { ...DEFAULT_PARAMS.rhythm, mode: 'off', rate: STUDY_RATE[goalId] ?? 6 };
+  if (NO_RHYTHM[goalId] || !s.autoBeats) return off;
+  const tonic = SOUND_BY_ID[soundId]?.tonic ?? 9;
+  return { mode: s.beatMode, rate: STUDY_RATE[goalId] ?? 6, depth: 0.15, carrier: carrierFor(tonic), levelDb: -15 };
+}
+
 export function Player(p: PlayerProps) {
   const s = settings.value;
-  const [sound, setSound] = useState<SoundChoice>((s.lastSound[p.goalId] as SoundChoice) ?? p.defaultSound);
+  const initial = (() => {
+    const last = s.lastSound[p.goalId];
+    if (last && (SOUND_BY_ID[last] || (last === 'none' && p.allowNone))) return last;
+    return p.defaultSound;
+  })();
+  const [sound, setSound] = useState<SoundChoice>(initial);
   const [upload, setUpload] = useState<engine.UploadInfo | null>(null);
   const [breathing, setBreathing] = useState(p.breathing);
   const [minutes, setMinutes] = useState(p.minutes);
@@ -111,9 +128,12 @@ export function Player(p: PlayerProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adjust, setAdjust] = useState(false);
+  const [library, setLibrary] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [running, setRunning] = useState(false);
-  const [rhythm, setRhythm] = useState<RhythmSettings>({ ...DEFAULT_PARAMS.rhythm, mode: 'off', rate: STUDY_RATE[p.goalId] ?? 6 });
+  const [rhythm, setRhythm] = useState<RhythmSettings>(() => autoRhythm(p.goalId, initial));
+  const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [nowPlaying, setNowPlaying] = useState<{ title: string; composer: string } | null>(null);
   const startedAt = useRef(0);
   const finished = useRef(false);
   const wake = useRef<{ release: () => Promise<void> } | null>(null);
@@ -123,6 +143,9 @@ export function Player(p: PlayerProps) {
   const total = minutes * 60;
   const status = engine.status.value;
   const playing = running && (status === 'playing' || status === 'stopping');
+  const item = SOUND_BY_ID[sound];
+  const instrument = item && item.visual !== 'orb' ? item.visual : null;
+  const showInstrument = !!instrument && s.visual === 'instrument';
 
   // Keep the timer text fresh.
   useEffect(() => {
@@ -149,10 +172,16 @@ export function Player(p: PlayerProps) {
   async function keyFor(choice: SoundChoice): Promise<string | null> {
     if (choice === 'none') return null;
     if (choice === 'upload') return upload?.key ?? null;
-    const first = !(await hasCached(choice));
-    if (first) setBusy('Preparing sound… (first time only)');
+    const it = SOUND_BY_ID[choice];
+    if (!it) return null;
+    if (it.kind === 'score') setBusy('Loading the piano…');
+    else if (!(await hasCached(it.track!))) setBusy('Preparing sound… (first time only)');
     try {
-      return await engine.loadTrack(choice);
+      const loaded = await engine.loadSound(choice);
+      setTimeline(loaded.visual);
+      if (loaded.visual?.parts?.length) setNowPlaying({ title: loaded.visual.parts[0].title, composer: loaded.visual.parts[0].composer });
+      else setNowPlaying(null);
+      return loaded.key;
     } finally {
       setBusy(null);
     }
@@ -172,7 +201,7 @@ export function Player(p: PlayerProps) {
         noise: null,
         params: buildParams({ breathing, pattern, music: sound !== 'none', rhythm }),
         timing: timingFor(minutes, p.sleep),
-        title: p.title,
+        title: nowPlaying?.title ?? p.title,
         onEnded: () => void finish(false, true),
       });
       setRunning(true);
@@ -203,10 +232,19 @@ export function Player(p: PlayerProps) {
       return;
     }
     setSound(choice);
+    setTimeline(null);
+    setNowPlaying(null);
+    // Keep the beat tone in the key of the new music.
+    const tonic = SOUND_BY_ID[choice]?.tonic;
+    if (tonic !== undefined) setRhythm((r) => ({ ...r, carrier: carrierFor(tonic) }));
     updateSettings({ lastSound: { ...settings.value.lastSound, [p.goalId]: choice } });
     if (running) {
-      const key = await keyFor(choice);
-      engine.setMusic(key);
+      try {
+        const key = await keyFor(choice);
+        engine.setMusic(key);
+      } catch (e) {
+        setError(`Could not load that sound: ${String((e as Error).message ?? e)}`);
+      }
     }
   }
 
@@ -218,6 +256,8 @@ export function Player(p: PlayerProps) {
       const info = await engine.loadUpload(f);
       setUpload(info);
       setSound('upload');
+      setTimeline(null);
+      setNowPlaying({ title: info.name, composer: 'Your music' });
       if (running) engine.setMusic(info.key);
     } catch (err) {
       setError(`That file could not be read here: ${String((err as Error).message ?? err)}`);
@@ -228,11 +268,29 @@ export function Player(p: PlayerProps) {
 
   const remaining = Math.max(0, total - elapsed);
   const guideText = p.guide?.(elapsed, total) ?? null;
+  const suggestions = [...new Set([sound, ...p.sounds])].filter((id) => SOUND_BY_ID[id]).slice(0, 5);
 
   return (
     <div>
       <div class="stage">
-        <Orb pattern={pattern} active={breathing} playing={playing} label={playing ? '' : ''} />
+        {showInstrument ? (
+          <InstrumentView kind={instrument!} timeline={timeline} playing={playing} breathing={breathing} pattern={pattern} onPart={(title, composer) => setNowPlaying({ title, composer })} />
+        ) : (
+          <Orb pattern={pattern} active={breathing} playing={playing} />
+        )}
+        {instrument && (
+          <div class="visual-toggle">
+            <Seg value={s.visual} label="Visual" onChange={(visual) => updateSettings({ visual })} options={[{ v: 'instrument', label: instrument === 'piano' ? 'Piano' : 'Strings' }, { v: 'circle', label: 'Circle' }]} />
+          </div>
+        )}
+        <div class="now-playing">
+          {(nowPlaying || item) && sound !== 'none' && (
+            <>
+              <div class="t">{nowPlaying?.title ?? item?.title}</div>
+              <div class="c">{nowPlaying?.composer ?? item?.subtitle}</div>
+            </>
+          )}
+        </div>
         <div class="timer" aria-live="off">{fmtTime(running ? remaining : total)}</div>
         <div class="timer-sub">{running ? (p.sleep && elapsed > 300 ? 'fading out slowly' : 'remaining') : `${minutes} min session`}</div>
       </div>
@@ -255,10 +313,13 @@ export function Player(p: PlayerProps) {
       {p.children?.(elapsed, running)}
 
       <div class="card tight">
-        <div class="field-head" style="margin-bottom:8px"><span>Sound</span><span class="v">{soundBlurb(sound, upload)}</span></div>
+        <div class="field-head" style="margin-bottom:8px">
+          <span>Music</span>
+          <button class="btn small ghost" style="min-height:32px;padding:4px 12px" onClick={() => setLibrary(true)}><Icon name="book" size={16} /> Browse all</button>
+        </div>
         <div class="chips">
-          {p.sounds.map((id) => (
-            <button class={`chip ${sound === id ? 'on' : ''}`} onClick={() => pickSound(id)}>{TRACKS.find((t) => t.id === id)!.name}</button>
+          {suggestions.map((id) => (
+            <button class={`chip ${sound === id ? 'on' : ''}`} onClick={() => pickSound(id)}>{shortTitle(id)}</button>
           ))}
           <button class={`chip ${sound === 'upload' ? 'on' : ''}`} onClick={() => (upload ? pickSound('upload') : fileInput.current?.click())}>
             {upload ? `♪ ${shorten(upload.name)}` : '+ Your music'}
@@ -272,7 +333,15 @@ export function Player(p: PlayerProps) {
           </div>
         )}
         <div class="hr" style="margin:12px 0 4px" />
-        <Toggle label="Breathing guide" hint="Circle + a gentle swell in the sound" checked={breathing} onChange={setBreathing} />
+        <Toggle label="Breathing guide" hint="Breath cue + a gentle swell in the sound" checked={breathing} onChange={setBreathing} />
+        {!NO_RHYTHM[p.goalId] && (
+          <Toggle
+            label={<>Beats <span class="exp-tag">Experimental</span></>}
+            hint={rhythm.mode === 'off' ? 'Off' : `${rhythm.mode === 'binaural' ? 'Binaural (headphones)' : 'Pulse'} · ${rhythm.rate} Hz · tuned to the music`}
+            checked={rhythm.mode !== 'off'}
+            onChange={(on) => setRhythm({ ...rhythm, mode: on ? s.beatMode : 'off', carrier: carrierFor(SOUND_BY_ID[sound]?.tonic ?? 9) })}
+          />
+        )}
         <div class="btn-row" style="margin-bottom:0">
           <button class="btn small ghost" onClick={() => setAdjust(true)}><Icon name="sliders" size={18} /> Adjust</button>
           <button class="btn small ghost" onClick={() => setExportOpen(true)}><Icon name="download" size={18} /> Save as file</button>
@@ -286,12 +355,12 @@ export function Player(p: PlayerProps) {
       )}
 
       {rhythm.mode !== 'off' && (
-        <div class="note warn small">
-          <span class="exp-tag">Experimental</span> Rhythm layer on: {rhythm.mode === 'binaural' ? `binaural ${rhythm.rate} Hz (headphones only)` : `pulse ${rhythm.rate} Hz`}.{' '}
-          {p.goalId === 'focus' ? 'Unproven for focus.' : 'Evidence is weak; most of any benefit likely comes from the music.'}
-        </div>
+        <p class="tiny faint">
+          Beats: evidence is weak, and most of any benefit likely comes from the music{p.goalId === 'focus' ? '; unproven for focus' : ''}. Test it blinded in the Lab to see if it helps you.
+        </p>
       )}
 
+      {library && <MusicLibrary current={sound} allowNone={p.allowNone} onPick={(id) => { setLibrary(false); if (id === 'upload') fileInput.current?.click(); else void pickSound(id); }} onClose={() => setLibrary(false)} />}
       {adjust && <AdjustSheet onClose={() => setAdjust(false)} goalId={p.goalId} rhythm={rhythm} setRhythm={setRhythm} />}
       {exportOpen && (
         <ExportSheet
@@ -310,7 +379,7 @@ export function Player(p: PlayerProps) {
 
 async function hasCached(id: TrackId): Promise<boolean> {
   try {
-    const keys = await db.get('cache', `track:${id}:${engine.sampleRate()}:v3`);
+    const keys = await db.get('cache', `track:${id}:${engine.sampleRate()}:v4`);
     return !!keys;
   } catch {
     return false;
@@ -321,10 +390,51 @@ function shorten(s: string): string {
   return s.length > 18 ? `${s.slice(0, 16)}…` : s;
 }
 
-function soundBlurb(sound: SoundChoice, upload: engine.UploadInfo | null): string {
-  if (sound === 'none') return 'silence';
-  if (sound === 'upload') return upload ? `${fmtTime(upload.seconds)} · stays on this device` : '';
-  return TRACKS.find((t) => t.id === sound)?.kind === 'noise' ? 'noise' : 'generative music';
+function shortTitle(id: string): string {
+  const it = SOUND_BY_ID[id];
+  if (!it) return id;
+  if (it.category !== 'classical') return it.title;
+  const last = it.subtitle.split(' ').pop();
+  const t = it.title.replace(/ in [A-G][♭♯]? (major|minor)/, '').replace(/,? Op\. [0-9]+ No\. ([0-9]+)/, ' $1').replace(/\s*\(.*\)/, '');
+  return `${last}: ${t}`;
+}
+
+const CAT_ICON: Record<Category, string> = { classical: 'book', piano: 'leaf', chill: 'wave', ambient: 'moon', strings: 'wave', musicbox: 'heart', nature: 'drop' };
+
+export function MusicLibrary({ current, allowNone, onPick, onClose }: { current: string; allowNone?: boolean; onPick: (id: string) => void; onClose: () => void }) {
+  return (
+    <Sheet onClose={onClose}>
+      <h2 style="margin-top:4px">Music</h2>
+      <p class="small muted" style="margin-top:0">Everything here is free to use. Beats (if on) are added on top automatically and tuned to the music's key.</p>
+      <button class="lib-item" onClick={() => onPick('upload')}>
+        <span class="ic"><Icon name="upload" /></span>
+        <span><div class="tt">Your own music</div><div class="st">Any audio file on this device. It never leaves your phone.</div></span>
+      </button>
+      {allowNone && (
+        <button class={`lib-item ${current === 'none' ? 'on' : ''}`} onClick={() => onPick('none')}>
+          <span class="ic"><Icon name="x" /></span>
+          <span><div class="tt">No sound</div><div class="st">Breathing only</div></span>
+        </button>
+      )}
+      {CATEGORIES.map((c) => {
+        const items = SOUNDS.filter((x) => x.category === c.id);
+        return (
+          <div>
+            <div class="lib-cat"><h3>{c.name}</h3><span class="tiny faint">{c.blurb}</span></div>
+            {items.map((it) => (
+              <button class={`lib-item ${current === it.id ? 'on' : ''}`} onClick={() => onPick(it.id)}>
+                <span class="ic"><Icon name={CAT_ICON[c.id]} /></span>
+                <span><div class="tt">{it.title}</div><div class="st">{it.subtitle}</div></span>
+                {it.category === 'classical' && <span class="lic">{it.license}</span>}
+              </button>
+            ))}
+          </div>
+        );
+      })}
+      <p class="tiny faint">Classical pieces are played from free scores (Mutopia Project) on a real upright piano sound (FreePats, CC0), with gentle human timing and pedal added. It is a computer playing, not a recorded pianist. Licenses: see ATTRIBUTION.md.</p>
+      <button class="btn block" onClick={onClose}>Close</button>
+    </Sheet>
+  );
 }
 
 export function VolumeCard() {

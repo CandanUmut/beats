@@ -7,7 +7,7 @@ const rate = 48000;
 
 describe('generative tracks', () => {
   for (const t of TRACKS) {
-    it(`${t.id}: renders a ${t.loop}s loop at -20 LUFS (+-1 LU) with no seam click`, () => {
+    it(`${t.id}: renders a ${t.loop.toFixed(1)}s loop at -20 LUFS (+-1 LU) with no seam click`, () => {
       const t0 = performance.now();
       const tr = renderTrack(t.id, rate);
       const ms = performance.now() - t0;

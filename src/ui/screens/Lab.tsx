@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { GOALS, GOAL_BY_ID } from '../../data/goals';
-import { TRACKS, type TrackId } from '../../audio/dsp/synth';
+import { SOUNDS, SOUND_BY_ID, carrierFor } from '../../music/catalog';
 import { patternFor } from '../../audio/dsp/breath';
 import { DEFAULT_PARAMS, type MixParams } from '../../audio/dsp/mixer';
 import * as engine from '../../audio/engine';
@@ -117,11 +117,11 @@ function NewExperiment() {
       <div class="card">
         <h3 style="margin-top:0">3. Keep everything else the same</h3>
         <div class="field-head"><span>{p.factor === 'sound' ? 'Sound A' : 'Sound'}</span></div>
-        <div class="chips">{goal.sounds.map((t) => <button class={`chip ${p.sound === t ? 'on' : ''}`} onClick={() => set({ sound: t })}>{trackName(t)}</button>)}</div>
+        <div class="chips">{[...new Set([p.sound, ...goal.sounds])].map((t) => <button class={`chip ${p.sound === t ? 'on' : ''}`} onClick={() => set({ sound: t, rhythm: { ...p.rhythm, carrier: carrierFor(SOUND_BY_ID[t]?.tonic ?? 9) } })}>{trackName(t)}</button>)}</div>
         {p.factor === 'sound' && (
           <>
             <div class="field-head"><span>Sound B</span></div>
-            <div class="chips">{TRACKS.map((t) => t.id).filter((t) => t !== p.sound).map((t) => <button class={`chip ${p.soundB === t ? 'on' : ''}`} onClick={() => set({ soundB: t })}>{trackName(t)}</button>)}</div>
+            <div class="chips">{SOUNDS.map((t) => t.id).filter((t) => t !== p.sound).map((t) => <button class={`chip ${p.soundB === t ? 'on' : ''}`} onClick={() => set({ soundB: t })}>{trackName(t)}</button>)}</div>
           </>
         )}
         <Slider label="Session length" value={p.minutes} min={5} max={30} step={1} format={(v) => `${v} min`} onInput={(minutes) => set({ minutes })} />
@@ -191,8 +191,9 @@ function NewExperiment() {
   );
 }
 
-function trackName(t: TrackId): string {
-  return TRACKS.find((x) => x.id === t)?.name ?? t;
+function trackName(t: string): string {
+  const it = SOUND_BY_ID[t];
+  return it ? (it.category === 'classical' ? `${it.subtitle.split(' ').pop()}: ${it.title}` : it.title) : t;
 }
 
 // --- Experiment page ------------------------------------------------------------
@@ -277,7 +278,7 @@ function ExperimentPage({ id }: { id: string }) {
 
 // --- Session runner -------------------------------------------------------
 
-export function armParams(plan: Plan, arm: Arm | null): { params: MixParams; track: TrackId } {
+export function armParams(plan: Plan, arm: Arm | null): { params: MixParams; track: string } {
   const s = settings.value;
   const a = arm === 'A';
   const control = arm === null ? true : !a; // baseline uses the control setup
@@ -340,7 +341,7 @@ function LabSession({ id }: { id: string }) {
     setLoading(true);
     await engine.ensureAudio();
     const { params, track } = armParams(plan, next.arm);
-    const key = await engine.loadTrack(track);
+    const key = (await engine.loadSound(track)).key;
     setLoading(false);
     startedAt.current = Date.now();
     setStep('play');

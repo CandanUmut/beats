@@ -14,7 +14,8 @@ Epilepsy; severe tinnitus, sound sensitivity or hearing loss in one ear; psychos
 - Volume calibration with a reference sound; points to OS volume limiters.
 - Default session lengths of 30 minutes or less; sleep sessions fade out and never loop all night.
 - Weekly listening log using a conservative assumed level (the browser can't measure real loudness).
-- No flashing or flickering visuals anywhere.
+- No flashing or flickering visuals anywhere. Instrument animations fade smoothly; with "reduce motion" on, falling notes are turned off.
+- Beats are labeled Experimental. They are added automatically only in Relax, Sleep, Focus and Breathe (owner's choice, switchable in Settings), never in Calm down or Ride an urge, and always 15 dB below the music.
 - Help lines (US: 988, SAMHSA 1-800-662-4357; directory for other countries) one tap away. Edit `src/data/helplines.ts` to add regions.
 - Nudges toward professional support if the urge flow is used more than 5 times in a week, or the calm-down flow on 12+ of the last 14 days.
 

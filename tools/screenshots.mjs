@@ -67,10 +67,23 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await page.goto(base + '#/relax');
   await page.click('button[aria-label=Start]');
   await page.waitForSelector('button[aria-label=Stop]', { timeout: 60000 });
-  await page.waitForTimeout(6000);
+  await page.waitForTimeout(9000);
   await shot('19-relax-playing', false);
+  const state = await page.evaluate(() => document.querySelector('.now-playing')?.textContent);
+  console.log(label, 'now playing:', state);
   await page.click('text=Talk to someone');
   await shot('20-help-sheet', false);
+  await page.click('.sheet .btn.block');
+  // Music library, then a strings piece.
+  await page.click('text=Browse all');
+  await page.waitForSelector('.lib-item');
+  await shot('26-music-library');
+  await page.click('.lib-item:has-text("Warm strings")');
+  await page.waitForTimeout(8000);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot('27-strings-playing', false);
+  await page.click('button[aria-label=Stop]');
+  await page.waitForTimeout(2500);
   await ctx.close();
 }
 await browser.close();

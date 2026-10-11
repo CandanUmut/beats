@@ -8,12 +8,18 @@
 
 import { breathAt, swellGain, type BreathPattern } from './breath';
 import { TruePeakLimiter } from './limiter';
+import type { ScorePlayer } from './sampler';
 import { dbToLin, kGainDb, TARGET_LUFS } from './loudness';
 
 export interface LoopBuffer {
   left: Float32Array;
   right: Float32Array;
 }
+
+/** Music is either a looping buffer or a live-rendered score (piano). */
+export type MusicSource = LoopBuffer | ScorePlayer;
+
+const isScore = (m: MusicSource | null): m is ScorePlayer => !!m && (m as ScorePlayer).kind === 'score';
 
 export type RhythmMode = 'off' | 'pulse' | 'binaural';
 
@@ -70,7 +76,7 @@ class Smooth {
 
 export class SessionMixer {
   readonly rate: number;
-  private music: LoopBuffer | null = null;
+  private music: MusicSource | null = null;
   private noise: LoopBuffer | null = null;
   private musicPos = 0;
   private noisePos = 0;
@@ -91,7 +97,9 @@ export class SessionMixer {
   private gBreathDepth: Smooth;
   private gSwell: Smooth;
   // Sound swap: fade the old sound out, swap, fade the new one in.
-  private pendingMusic: LoopBuffer | null | undefined = undefined;
+  private pendingMusic: MusicSource | null | undefined = undefined;
+  private scratchL = new Float32Array(128);
+  private scratchR = new Float32Array(128);
   private swapLen: number;
   private swapPos = 0;
   // Phase-continuous oscillators.
@@ -123,12 +131,30 @@ export class SessionMixer {
     return this.frame / this.rate;
   }
 
+  /** Playback position inside the current music, seconds (for visuals). */
+  get musicTime(): number {
+    const m = this.music;
+    if (!m) return 0;
+    return isScore(m) ? m.time : this.musicPos / this.rate;
+  }
+
+  private fillScratch(m: MusicSource | null, from: number, count: number): void {
+    if (!isScore(m) || count <= 0) return;
+    if (this.scratchL.length < from + count) {
+      const n = Math.max(from + count, this.scratchL.length * 2);
+      const l = new Float32Array(n), r = new Float32Array(n);
+      l.set(this.scratchL); r.set(this.scratchR);
+      this.scratchL = l; this.scratchR = r;
+    }
+    m.render(this.scratchL.subarray(from, from + count), this.scratchR.subarray(from, from + count), count);
+  }
+
   get limiterMinGain(): number {
     return this.limiter.minGain;
   }
 
   /** Change the music. Before the first sample it switches at once; later it crossfades through silence. */
-  setMusic(b: LoopBuffer | null): void {
+  setMusic(b: MusicSource | null): void {
     if (this.frame === 0 || !this.music) {
       this.music = b;
       this.musicPos = 0;
@@ -201,6 +227,7 @@ export class SessionMixer {
     const twoPi = 2 * Math.PI;
     let m = this.music;
     const n = this.noise;
+    this.fillScratch(m, 0, frames);
     const wAm = (twoPi * p.rhythm.rate) / r;
     const fL = p.rhythm.carrier - p.rhythm.rate / 2;
     const fR = p.rhythm.carrier + p.rhythm.rate / 2;
@@ -219,12 +246,16 @@ export class SessionMixer {
           this.pendingMusic = undefined;
           this.musicPos = 0;
           m = this.music;
+          this.fillScratch(m, i, frames - i);
         }
         const u = k <= this.swapLen ? 1 - k / this.swapLen : (k - this.swapLen) / this.swapLen;
         gm *= 0.5 - 0.5 * Math.cos(Math.PI * u);
         this.swapPos = k >= 2 * this.swapLen ? 0 : k + 1;
       }
-      if (m) {
+      if (isScore(m)) {
+        l += this.scratchL[i] * gm;
+        rr += this.scratchR[i] * gm;
+      } else if (m) {
         l += m.left[this.musicPos] * gm;
         rr += m.right[this.musicPos] * gm;
         if (++this.musicPos >= m.left.length) this.musicPos = 0;

@@ -5,8 +5,9 @@
 import { brownNoise, crossfadeLoop, foldLoop, highpass, lowpass, pinkNoise } from './noise';
 import { integratedLoudness, dbToLin, TARGET_LUFS } from './loudness';
 import { mulberry32 } from './random';
+import { renderAurora, renderLofi, renderLullaby, renderStrings, type VisualNote } from './styles';
 
-export type TrackId = 'drift' | 'hush' | 'rain' | 'pink' | 'brown';
+export type TrackId = 'drift' | 'hush' | 'rain' | 'pink' | 'brown' | 'lofi' | 'aurora' | 'lullaby' | 'strings';
 
 export interface TrackInfo {
   id: TrackId;
@@ -20,6 +21,10 @@ export interface TrackInfo {
 export const TRACKS: TrackInfo[] = [
   { id: 'drift', name: 'Drift', kind: 'music', loop: 96, blurb: 'Slow pentatonic piano-like notes over a soft pad, about 60 BPM.' },
   { id: 'hush', name: 'Hush', kind: 'music', loop: 60, blurb: 'A warm, slowly moving drone. No melody, no surprises.' },
+  { id: 'lofi', name: 'Lo-fi chill', kind: 'music', loop: (16 * 4 * 60) / 72, blurb: 'Warm electric piano, soft swung drums and vinyl hiss, 72 BPM.' },
+  { id: 'aurora', name: 'Aurora', kind: 'music', loop: 64, blurb: 'Slow, wide ambient pads with distant bells.' },
+  { id: 'lullaby', name: 'Lullaby', kind: 'music', loop: (24 * 3 * 60) / 84, blurb: 'A gentle music box waltz in F major.' },
+  { id: 'strings', name: 'Warm strings', kind: 'music', loop: 64, blurb: 'A slow string quartet texture: cello, viola and violins.' },
   { id: 'rain', name: 'Soft rain', kind: 'noise', loop: 40, blurb: 'Synthesized steady rain with gentle drops.' },
   { id: 'pink', name: 'Pink noise', kind: 'noise', loop: 30, blurb: 'Even, soft hiss. Good for masking distractions.' },
   { id: 'brown', name: 'Brown noise', kind: 'noise', loop: 30, blurb: 'Deeper, rumbling noise. Softer on the ears than pink.' },
@@ -32,19 +37,27 @@ export interface RenderedTrack {
   right: Float32Array;
   /** Loudness of the rendered loop after normalization (LUFS). */
   lufs: number;
+  /** Notes played (for animations), within the loop. */
+  events: VisualNote[];
 }
 
 export function renderTrack(id: TrackId, rate: number, seed = 1): RenderedTrack {
   let st: [Float32Array, Float32Array];
+  let events: VisualNote[] = [];
+  const take = (r: { st: [Float32Array, Float32Array]; events: VisualNote[] }) => { events = r.events; return r.st; };
   switch (id) {
-    case 'drift': st = renderDrift(rate, seed); break;
+    case 'drift': st = take(renderDrift(rate, seed)); break;
+    case 'lofi': st = take(renderLofi(rate, seed)); break;
+    case 'aurora': st = take(renderAurora(rate, seed)); break;
+    case 'lullaby': st = take(renderLullaby(rate, seed)); break;
+    case 'strings': st = take(renderStrings(rate, seed)); break;
     case 'hush': st = renderHush(rate); break;
     case 'rain': st = renderRain(rate, seed); break;
     case 'pink': st = renderNoise(rate, 'pink', seed); break;
     case 'brown': st = renderNoise(rate, 'brown', seed); break;
   }
   const lufs = normalize(st, rate, TARGET_LUFS);
-  return { id, rate, left: st[0], right: st[1], lufs };
+  return { id, rate, left: st[0], right: st[1], lufs, events };
 }
 
 /** Scale a stereo pair in place to the target integrated loudness. */
@@ -160,7 +173,8 @@ export function reverb(L: Float32Array, R: Float32Array, rate: number, mix = 0.2
 // --- Tracks ----------------------------------------------------------------
 
 /** "Drift": generative D-major pentatonic notes at ~60 BPM over a soft pad. */
-function renderDrift(rate: number, seed: number): [Float32Array, Float32Array] {
+function renderDrift(rate: number, seed: number): { st: [Float32Array, Float32Array]; events: VisualNote[] } {
+  const events: VisualNote[] = [];
   const loop = 96;
   const tail = 10;
   const frames = Math.round((loop + tail) * rate);
@@ -179,6 +193,7 @@ function renderDrift(rate: number, seed: number): [Float32Array, Float32Array] {
     idx = Math.min(top, Math.max(0, idx + step));
     const start = b * beat + (rand() < 0.25 ? 0.5 : 0) + rand() * 0.02;
     const vel = 0.18 + rand() * 0.16;
+    events.push({ t: start, dur: 2.5, midi: melody[idx], vel: vel * 2 });
     addNote(L, R, rate, {
       freq: midiToHz(melody[idx]),
       start,
@@ -222,7 +237,7 @@ function renderDrift(rate: number, seed: number): [Float32Array, Float32Array] {
   });
   reverb(L, R, rate, 0.3);
   const loopFrames = Math.round(loop * rate);
-  return [foldLoop(L, loopFrames), foldLoop(R, loopFrames)];
+  return { st: [foldLoop(L, loopFrames), foldLoop(R, loopFrames)], events };
 }
 
 function addPad(L: Float32Array, R: Float32Array, rate: number, f: number, start: number, dur: number, amp: number, pan: number): void {

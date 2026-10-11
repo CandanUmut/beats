@@ -1,0 +1,188 @@
+{
+ "name": "Upright Piano KW (small)",
+ "source": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html#UprightKW",
+ "license": "CC0 1.0",
+ "release": 0.6,
+ "regions": [
+  {
+   "lo": 21,
+   "hi": 26,
+   "center": 24,
+   "file": "C1vH.flac",
+   "loopStart": 306378,
+   "loopEnd": 424657
+  },
+  {
+   "lo": 27,
+   "hi": 32,
+   "center": 30,
+   "file": "Fs1vH.flac",
+   "loopStart": 240705,
+   "loopEnd": 351556
+  },
+  {
+   "lo": 33,
+   "hi": 36,
+   "center": 35,
+   "file": "B1vH.flac",
+   "loopStart": 256475,
+   "loopEnd": 366932
+  },
+  {
+   "lo": 37,
+   "hi": 40,
+   "center": 39,
+   "file": "Ds2vH.flac",
+   "loopStart": 288169,
+   "loopEnd": 398441
+  },
+  {
+   "lo": 41,
+   "hi": 44,
+   "center": 42,
+   "file": "Fs2vH.flac",
+   "loopStart": 250236,
+   "loopEnd": 393511
+  },
+  {
+   "lo": 45,
+   "hi": 48,
+   "center": 47,
+   "file": "B2vH.flac",
+   "loopStart": 238940,
+   "loopEnd": 341297
+  },
+  {
+   "lo": 49,
+   "hi": 52,
+   "center": 51,
+   "file": "Ds3vH.flac",
+   "loopStart": 162986,
+   "loopEnd": 240314
+  },
+  {
+   "lo": 53,
+   "hi": 55,
+   "center": 54,
+   "file": "Fs3vH.flac",
+   "loopStart": 194343,
+   "loopEnd": 265634
+  },
+  {
+   "lo": 56,
+   "hi": 58,
+   "center": 57,
+   "file": "A3vH.flac",
+   "loopStart": 120679,
+   "loopEnd": 186801
+  },
+  {
+   "lo": 59,
+   "hi": 61,
+   "center": 60,
+   "file": "C4vH.flac",
+   "loopStart": 145927,
+   "loopEnd": 213379
+  },
+  {
+   "lo": 62,
+   "hi": 64,
+   "center": 63,
+   "file": "Ds4vH.flac",
+   "loopStart": 151896,
+   "loopEnd": 217597
+  },
+  {
+   "lo": 65,
+   "hi": 67,
+   "center": 66,
+   "file": "Fs4vH.flac",
+   "loopStart": 138527,
+   "loopEnd": 185330
+  },
+  {
+   "lo": 68,
+   "hi": 70,
+   "center": 69,
+   "file": "A4vH.flac"
+  },
+  {
+   "lo": 71,
+   "hi": 73,
+   "center": 72,
+   "file": "C5vH.flac"
+  },
+  {
+   "lo": 74,
+   "hi": 76,
+   "center": 75,
+   "file": "Ds5vH.flac"
+  },
+  {
+   "lo": 77,
+   "hi": 79,
+   "center": 78,
+   "file": "Fs5vH.flac"
+  },
+  {
+   "lo": 80,
+   "hi": 82,
+   "center": 81,
+   "file": "A5vH.flac"
+  },
+  {
+   "lo": 83,
+   "hi": 85,
+   "center": 84,
+   "file": "C6vH.flac"
+  },
+  {
+   "lo": 86,
+   "hi": 88,
+   "center": 87,
+   "file": "Ds6vH.flac"
+  },
+  {
+   "lo": 89,
+   "hi": 91,
+   "center": 90,
+   "file": "Fs6vH.flac"
+  },
+  {
+   "lo": 92,
+   "hi": 94,
+   "center": 93,
+   "file": "A6vH.flac"
+  },
+  {
+   "lo": 95,
+   "hi": 97,
+   "center": 96,
+   "file": "C7vH.flac"
+  },
+  {
+   "lo": 98,
+   "hi": 100,
+   "center": 99,
+   "file": "Ds7vH.flac"
+  },
+  {
+   "lo": 101,
+   "hi": 103,
+   "center": 102,
+   "file": "Fs7vH.flac"
+  },
+  {
+   "lo": 104,
+   "hi": 105,
+   "center": 105,
+   "file": "A7vH.flac"
+  },
+  {
+   "lo": 106,
+   "hi": 108,
+   "center": 107,
+   "file": "B7vH.flac"
+  }
+ ]
+}

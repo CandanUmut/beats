@@ -1,6 +1,7 @@
 // AudioWorklet wrapper around SessionMixer. Runs on the audio thread.
 /// <reference lib="webworker" />
-import { SessionMixer, type LoopBuffer, type MixParams, type SessionTiming } from './dsp/mixer';
+import { SessionMixer, type LoopBuffer, type MixParams, type MusicSource, type SessionTiming } from './dsp/mixer';
+import { ScorePlayer, type SampleRegion, type ScoreNote } from './dsp/sampler';
 
 declare const sampleRate: number;
 declare const currentTime: number;
@@ -11,6 +12,8 @@ declare class AudioWorkletProcessor {
 
 export type WorkletIn =
   | { type: 'load'; key: string; left: Float32Array; right: Float32Array }
+  | { type: 'bank'; regions: SampleRegion[] }
+  | { type: 'score'; key: string; notes: ScoreNote[]; length: number }
   | { type: 'start'; params: MixParams; timing: SessionTiming; music: string | null; noise: string | null }
   | { type: 'params'; params: MixParams }
   | { type: 'timing'; timing: SessionTiming }
@@ -20,11 +23,13 @@ export type WorkletIn =
 
 export type WorkletOut =
   | { type: 'started'; at: number; latency: number }
-  | { type: 'tick'; time: number; limiter: number }
+  | { type: 'tick'; time: number; limiter: number; musicTime: number; at: number }
   | { type: 'ended' };
 
 class SteadyProcessor extends AudioWorkletProcessor {
   private buffers = new Map<string, LoopBuffer>();
+  private scores = new Map<string, { notes: ScoreNote[]; length: number }>();
+  private regions: SampleRegion[] = [];
   private mixer: SessionMixer | null = null;
   private announced = false;
   private lastTick = 0;
@@ -40,9 +45,15 @@ class SteadyProcessor extends AudioWorkletProcessor {
       case 'load':
         this.buffers.set(m.key, { left: m.left, right: m.right });
         break;
+      case 'bank':
+        this.regions = m.regions;
+        break;
+      case 'score':
+        this.scores.set(m.key, { notes: m.notes, length: m.length });
+        break;
       case 'start':
         this.mixer = new SessionMixer(sampleRate, m.params, m.timing);
-        this.mixer.setMusic(m.music ? this.buffers.get(m.music) ?? null : null);
+        this.mixer.setMusic(this.source(m.music));
         this.mixer.setNoise(m.noise ? this.buffers.get(m.noise) ?? null : null);
         this.mixer.setParams(m.params);
         this.announced = false;
@@ -55,7 +66,7 @@ class SteadyProcessor extends AudioWorkletProcessor {
         this.mixer?.setTiming(m.timing);
         break;
       case 'music':
-        this.mixer?.setMusic(m.key ? this.buffers.get(m.key) ?? null : null);
+        this.mixer?.setMusic(this.source(m.key));
         break;
       case 'noise':
         this.mixer?.setNoise(m.key ? this.buffers.get(m.key) ?? null : null);
@@ -64,6 +75,14 @@ class SteadyProcessor extends AudioWorkletProcessor {
         this.mixer?.stop(m.seconds);
         break;
     }
+  }
+
+  /** A buffer, or a fresh score player (each play starts at the beginning). */
+  private source(key: string | null): MusicSource | null {
+    if (!key) return null;
+    const sc = this.scores.get(key);
+    if (sc) return new ScorePlayer(sampleRate, this.regions, sc.notes, sc.length);
+    return this.buffers.get(key) ?? null;
   }
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
@@ -81,9 +100,9 @@ class SteadyProcessor extends AudioWorkletProcessor {
       this.port.postMessage({ type: 'started', at: currentTime, latency: mx.latency / sampleRate } satisfies WorkletOut);
     }
     mx.process(L, R, L.length);
-    if (currentTime - this.lastTick > 0.25) {
+    if (currentTime - this.lastTick > 0.2) {
       this.lastTick = currentTime;
-      this.port.postMessage({ type: 'tick', time: mx.time, limiter: mx.limiterMinGain } satisfies WorkletOut);
+      this.port.postMessage({ type: 'tick', time: mx.time, limiter: mx.limiterMinGain, musicTime: mx.musicTime, at: currentTime } satisfies WorkletOut);
     }
     if (mx.finished) {
       this.ended = true;

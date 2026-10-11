@@ -136,6 +136,17 @@ export function Settings() {
         <p class="tiny faint" style="margin:0">Based on the WHO-ITU safe-listening reference (80 dB for 40 h a week; every +3 dB halves it). A browser can't measure how loud it really is in your ears, so this assumes a conservative level.</p>
       </div>
       <div class="card">
+        <h3 style="margin-top:0">Beats <span class="exp-tag">Experimental</span></h3>
+        <Toggle label="Add beats automatically" hint="In Relax, Sleep, Focus and Breathe. Never in Calm down or Ride an urge." checked={s.autoBeats} onChange={(autoBeats) => updateSettings({ autoBeats })} />
+        <Seg value={s.beatMode} onChange={(beatMode) => updateSettings({ beatMode })} label="Beat type" options={[{ v: 'binaural', label: 'Binaural (headphones)' }, { v: 'pulse', label: 'Pulse (speakers OK)' }]} />
+        <p class="tiny faint" style="margin-bottom:0">The beat tone is tuned to the key of the music. Evidence that beats add anything on top of music is weak. The Lab can test it for you, blinded. <a href="#/evidence/beats-entrainment">Why?</a></p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Visuals</h3>
+        <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Breathing circle' }]} />
+        <p class="tiny faint" style="margin-bottom:0">Animations move slowly and never flash. If your device asks for reduced motion, the falling notes are turned off.</p>
+      </div>
+      <div class="card">
         <h3 style="margin-top:0">Help lines region</h3>
         <Seg value={s.region} onChange={(region) => updateSettings({ region })} label="Region" options={REGIONS.map((r) => ({ v: r.id, label: r.name }))} />
       </div>

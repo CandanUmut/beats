@@ -58,3 +58,8 @@ Expect the generative music to need a round or two of listening feedback from yo
 - Lab: daily-count and time-of-day rules only warn. Reaction-time test runs **after** the session (it measures the session's effect). "Unsure" guesses count as half right.
 - Breathing swell and pulse are loudness-neutral (centred swell; RMS-matched AM), so active and sham play at the same level.
 - Export renders with the same TypeScript mixer in a Worker (not OfflineAudioContext), streaming to WAV so long sleep files don't need gigabytes of RAM. Export uses the device's sample rate (usually 48 kHz), not the original file's.
+
+## Music update (owner request: "all kinds of music, beats on automatically, Chopin, piano/violin animations")
+- Owner chose: classical from scores + real piano; beats on automatically except Calm down / Ride an urge; build everything at once.
+- This overrides the build prompt's "experimental layers off by default" for Relax, Sleep, Focus and Breathe. The UI still labels beats Experimental and says the evidence is weak.
+- Piano: FreePats Upright Piano KW small (CC0, 2.4 MB FLAC). Scores: Mutopia MIDI (public domain / CC BY-SA). Loudness per piece precomputed (`src/music/gains.json`, `tools/measure-gains.ts`).

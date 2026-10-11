@@ -5,6 +5,7 @@ import { renderTrack, type TrackId } from './dsp/synth';
 import { integratedLoudness, dbToLin, TARGET_LUFS } from './dsp/loudness';
 import { crossfadeLoop } from './dsp/noise';
 import { SessionMixer, type MixParams, type SessionTiming } from './dsp/mixer';
+import { ScorePlayer, type SampleRegion, type ScoreNote } from './dsp/sampler';
 import { PcmEncoder, wavHeader } from './dsp/wav';
 
 export type WorkerIn =
@@ -18,11 +19,12 @@ export type WorkerIn =
       params: MixParams;
       timing: SessionTiming;
       music: { left: Float32Array; right: Float32Array } | null;
+      score?: { regions: SampleRegion[]; notes: ScoreNote[]; length: number };
       noise: { left: Float32Array; right: Float32Array } | null;
     };
 
 export type WorkerOut =
-  | { id: number; type: 'track'; left: Float32Array; right: Float32Array; lufs: number }
+  | { id: number; type: 'track'; left: Float32Array; right: Float32Array; lufs: number; events: { t: number; dur: number; midi: number; vel: number }[] }
   | { id: number; type: 'prepared'; left: Float32Array; right: Float32Array; lufs: number; gainDb: number }
   | { id: number; type: 'progress'; done: number }
   | { id: number; type: 'exported'; blob: Blob }
@@ -35,7 +37,7 @@ ctx.onmessage = (e: MessageEvent<WorkerIn>) => {
   try {
     if (m.type === 'track') {
       const t = renderTrack(m.track, m.rate);
-      ctx.postMessage({ id: m.id, type: 'track', left: t.left, right: t.right, lufs: t.lufs } satisfies WorkerOut, [t.left.buffer, t.right.buffer]);
+      ctx.postMessage({ id: m.id, type: 'track', left: t.left, right: t.right, lufs: t.lufs, events: t.events } satisfies WorkerOut, [t.left.buffer, t.right.buffer]);
     } else if (m.type === 'prepareUpload') {
       const before = integratedLoudness([m.left, m.right], m.rate);
       const gainDb = Number.isFinite(before) ? TARGET_LUFS - before : 0;
@@ -52,7 +54,7 @@ ctx.onmessage = (e: MessageEvent<WorkerIn>) => {
       ctx.postMessage({ id: m.id, type: 'prepared', left, right, lufs, gainDb } satisfies WorkerOut, [left.buffer, right.buffer]);
     } else if (m.type === 'export') {
       const mx = new SessionMixer(m.rate, m.params, m.timing);
-      mx.setMusic(m.music);
+      mx.setMusic(m.score ? new ScorePlayer(m.rate, m.score.regions, m.score.notes, m.score.length) : m.music);
       mx.setNoise(m.noise);
       mx.setParams(m.params);
       const frames = Math.round(m.timing.duration * m.rate);

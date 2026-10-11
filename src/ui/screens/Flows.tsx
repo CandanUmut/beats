@@ -53,7 +53,7 @@ export function Relax() {
           minutes={g.minutes}
           minuteOptions={[10, 20, 30]}
           breathing
-          guide={(t) => (t < 45 ? 'Breathe with the circle, or just listen.' : null)}
+          guide={(t) => (t < 45 ? 'Breathe with the cue, or just listen.' : null)}
           onFinish={(_, early) => !early && setDone(true)}
         />
       )}
@@ -442,7 +442,7 @@ export function Breathe() {
           key={key}
           goalId="breathe"
           title="Breathe"
-          sounds={['hush', 'rain', 'drift']}
+          sounds={['hush', 'aurora', 'piece:bach-prel-c', 'rain']}
           defaultSound="hush"
           allowNone
           minutes={3}

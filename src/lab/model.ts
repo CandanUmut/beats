@@ -2,7 +2,6 @@
 
 import { db, uid } from '../data/db';
 import type { GoalId } from '../data/goals';
-import type { TrackId } from '../audio/dsp/synth';
 import type { BreathSettings } from '../audio/dsp/breath';
 import { binomialP, blockSchedule, mean, pairedCI, pairsFromSchedule, permutationP, sd, type Arm, type PairedResult } from './stats';
 import { parseCsv, toCsv } from '../lib/csv';
@@ -81,8 +80,9 @@ export interface Plan {
   factor: Factor;
   outcome: OutcomeId;
   minutes: number;
-  sound: TrackId;
-  soundB?: TrackId;
+  /** Sound id from the music library. */
+  sound: string;
+  soundB?: string;
   breathing: boolean;
   breath: BreathSettings;
   rhythm: { rate: number; depth: number; carrier: number; levelDb: number };
@@ -156,7 +156,7 @@ export function newPlan(goal: GoalId): Plan {
     factor: 'binaural',
     outcome: DEFAULT_OUTCOME[goal],
     minutes: 24,
-    sound: goal === 'focus' ? 'brown' : goal === 'sleep' || goal === 'urge' ? 'hush' : 'drift',
+    sound: goal === 'focus' ? 'brown' : goal === 'sleep' ? 'reverie' : goal === 'urge' ? 'aurora' : 'piece:satie-gym-1',
     breathing: goal !== 'focus',
     breath: { mode: 'paced', bpm: 6, ratio: 1.5 },
     rhythm: { rate: DEFAULT_RATE[goal], depth: 0.15, carrier: 220, levelDb: -15 },
