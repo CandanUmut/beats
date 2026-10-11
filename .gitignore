@@ -1,0 +1,7 @@
+node_modules
+dist
+screenshots/*.tmp.png
+*.log
+.DS_Store
+tools/.venv
+__pycache__
