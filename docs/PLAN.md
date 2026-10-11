@@ -1,6 +1,6 @@
 # M0 plan
 
-Status: draft, waiting for the owner's yes. No app code has been written.
+Status: approved with "take the lead" (owner, M0 reply). Decisions taken are listed at the end.
 
 ## Summary
 
@@ -46,3 +46,15 @@ Status: draft, waiting for the owner's yes. No app code has been written.
 | M5 optional | unknown | each item is its own project; decide later |
 
 Expect the generative music to need a round or two of listening feedback from you. I can check it with numbers, but I can't hear it.
+
+## Decisions taken (owner said: take the lead, warn-only Lab limits)
+
+- Working name **Steady** (easy to change: `index.html`, manifest, header).
+- **Preact** + signals; Vite 6; Vitest 3.
+- Grades: Relax/Beats shown as "Weak" with "Weak–Moderate vs pink noise" on the Why? page; Sleep/Music "Weak–Moderate" marked as the app's own judgment.
+- Breathing pace 4.5–7/min, exhale ratio 1–2× (default 1.5×), cyclic sigh 2.2 s + 0.9 s top-up + 5.9 s out.
+- Binaural level capped at −12 dB vs the music. No 40 Hz binaural. No rhythm layer in Calm/Urge flows.
+- Listening log assumes 83 dB(A) (20 h/week), adjustable.
+- Lab: daily-count and time-of-day rules only warn. Reaction-time test runs **after** the session (it measures the session's effect). "Unsure" guesses count as half right.
+- Breathing swell and pulse are loudness-neutral (centred swell; RMS-matched AM), so active and sham play at the same level.
+- Export renders with the same TypeScript mixer in a Worker (not OfflineAudioContext), streaming to WAV so long sleep files don't need gigabytes of RAM. Export uses the device's sample rate (usually 48 kHz), not the original file's.

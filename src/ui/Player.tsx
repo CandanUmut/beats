@@ -75,17 +75,26 @@ export function Orb({ pattern, active, playing, label }: { pattern: BreathPatter
   );
 }
 
-export function buildParams(o: { breathing: boolean; pattern: BreathPattern; music: boolean }): MixParams {
+export type RhythmSettings = MixParams['rhythm'];
+
+export function buildParams(o: { breathing: boolean; pattern: BreathPattern; music: boolean; rhythm?: RhythmSettings }): MixParams {
   const s = settings.value;
   return {
     ...DEFAULT_PARAMS,
     musicGainDb: o.music ? 0 : -80,
     noiseGainDb: -80,
     breath: { enabled: o.breathing, pattern: o.pattern, depthDb: s.swellDb },
-    rhythm: { ...DEFAULT_PARAMS.rhythm, mode: 'off' },
+    rhythm: o.rhythm ?? { ...DEFAULT_PARAMS.rhythm, mode: 'off' },
     volume: s.volume,
   };
 }
+
+/** Beat rates "used in studies" per goal (docs/RESEARCH.md, table 3.5). */
+const STUDY_RATE: Record<string, number> = { relax: 6, sleep: 2, focus: 14, breathe: 6 };
+const NO_RHYTHM: Record<string, string> = {
+  calm: 'Not offered here: there is no evidence beats help with anger, and one small study found anger went up. You can still test it in the Lab.',
+  urge: 'Not offered here: no study shows beats reduce urges. The timer and prompts are what help. You can test it in the Lab.',
+};
 
 export function timingFor(minutes: number, sleep?: boolean): SessionTiming {
   const duration = minutes * 60;
@@ -104,6 +113,7 @@ export function Player(p: PlayerProps) {
   const [adjust, setAdjust] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [running, setRunning] = useState(false);
+  const [rhythm, setRhythm] = useState<RhythmSettings>({ ...DEFAULT_PARAMS.rhythm, mode: 'off', rate: STUDY_RATE[p.goalId] ?? 6 });
   const startedAt = useRef(0);
   const finished = useRef(false);
   const wake = useRef<{ release: () => Promise<void> } | null>(null);
@@ -124,8 +134,8 @@ export function Player(p: PlayerProps) {
   // Push parameter changes to the live session.
   useEffect(() => {
     if (!running) return;
-    engine.updateParams(buildParams({ breathing, pattern, music: sound !== 'none' }));
-  }, [running, breathing, pattern, sound, s.volume, s.swellDb]);
+    engine.updateParams(buildParams({ breathing, pattern, music: sound !== 'none', rhythm }));
+  }, [running, breathing, pattern, sound, s.volume, s.swellDb, rhythm]);
 
   // Stop the sound if the screen is left mid-session.
   useEffect(() => () => {
@@ -160,7 +170,7 @@ export function Player(p: PlayerProps) {
       await engine.startSession({
         music: key,
         noise: null,
-        params: buildParams({ breathing, pattern, music: sound !== 'none' }),
+        params: buildParams({ breathing, pattern, music: sound !== 'none', rhythm }),
         timing: timingFor(minutes, p.sleep),
         title: p.title,
         onEnded: () => void finish(false, true),
@@ -275,14 +285,21 @@ export function Player(p: PlayerProps) {
         <p class="tiny faint">On iPhone and iPad, sound can stop when the screen locks. For long or overnight sessions, use "Save as file" and play it in a music app.</p>
       )}
 
-      {adjust && <AdjustSheet onClose={() => setAdjust(false)} />}
+      {rhythm.mode !== 'off' && (
+        <div class="note warn small">
+          <span class="exp-tag">Experimental</span> Rhythm layer on: {rhythm.mode === 'binaural' ? `binaural ${rhythm.rate} Hz (headphones only)` : `pulse ${rhythm.rate} Hz`}.{' '}
+          {p.goalId === 'focus' ? 'Unproven for focus.' : 'Evidence is weak; most of any benefit likely comes from the music.'}
+        </div>
+      )}
+
+      {adjust && <AdjustSheet onClose={() => setAdjust(false)} goalId={p.goalId} rhythm={rhythm} setRhythm={setRhythm} />}
       {exportOpen && (
         <ExportSheet
           onClose={() => setExportOpen(false)}
           maxMinutes={minutes}
           make={async (mins) => ({
             music: await keyFor(sound),
-            params: buildParams({ breathing, pattern, music: sound !== 'none' }),
+            params: buildParams({ breathing, pattern, music: sound !== 'none', rhythm }),
             timing: timingFor(mins, p.sleep),
           })}
         />
@@ -328,9 +345,10 @@ export function VolumeCard() {
   );
 }
 
-function AdjustSheet({ onClose }: { onClose: () => void }) {
+function AdjustSheet({ onClose, goalId, rhythm, setRhythm }: { onClose: () => void; goalId: string; rhythm: RhythmSettings; setRhythm: (r: RhythmSettings) => void }) {
   const s = settings.value;
   const b = s.breath;
+  const mono = s.headphones.mono === 'mono';
   return (
     <Sheet onClose={onClose}>
       <h2 style="margin-top:4px">Breathing</h2>
@@ -354,6 +372,41 @@ function AdjustSheet({ onClose }: { onClose: () => void }) {
       )}
       <Slider label="Swell depth" value={s.swellDb} min={0} max={8} step={0.5} format={(v) => (v === 0 ? 'off' : `${v} dB`)} onInput={(swellDb) => updateSettings({ swellDb })} />
       <Toggle label="Vibrate on each breath" hint="Android only. iPhones don't allow it." checked={s.vibrate} onChange={(vibrate) => updateSettings({ vibrate })} />
+
+      <h2>Rhythm layer <span class="exp-tag">Experimental</span></h2>
+      {NO_RHYTHM[goalId] ? (
+        <p class="small muted">{NO_RHYTHM[goalId]}</p>
+      ) : (
+        <>
+          <p class="small muted" style="margin-top:0">
+            {goalId === 'focus' ? 'Experimental, unproven for focus. ' : ''}Beats probably don't "tune" your brain; evidence is weak. Off by default. To find out if it does anything for you, test it blinded in the Lab.
+          </p>
+          <Seg
+            value={rhythm.mode}
+            label="Rhythm mode"
+            onChange={(mode) => setRhythm({ ...rhythm, mode })}
+            options={[{ v: 'off', label: 'Off' }, { v: 'pulse', label: 'Pulse (speakers OK)' }, { v: 'binaural', label: 'Binaural' }]}
+          />
+          {rhythm.mode === 'binaural' && (
+            <p class="tiny" style="color:var(--moderate)">Headphones only, in stereo.{mono ? ' Your stereo check said mono, so you will not get a beat.' : ''}</p>
+          )}
+          {rhythm.mode !== 'off' && (
+            <>
+              <Slider label={rhythm.mode === 'binaural' ? 'Beat rate (Δf)' : 'Pulse rate'} value={rhythm.rate} min={rhythm.mode === 'binaural' ? 1 : 0.5} max={20} step={0.5} format={(v) => `${v} Hz`} onInput={(rate) => setRhythm({ ...rhythm, rate })} />
+              {rhythm.mode === 'pulse' && (
+                <Slider label="Pulse depth" value={Math.round(rhythm.depth * 100)} min={0} max={40} step={1} format={(v) => `${v}%`} onInput={(v) => setRhythm({ ...rhythm, depth: v / 100 })} />
+              )}
+              {rhythm.mode === 'binaural' && (
+                <>
+                  <Slider label="Carrier tone" value={rhythm.carrier} min={150} max={450} step={5} format={(v) => `${v} Hz`} onInput={(carrier) => setRhythm({ ...rhythm, carrier })} />
+                  <Slider label="Tone level vs music" value={rhythm.levelDb} min={-30} max={-12} step={1} format={(v) => `${v} dB`} onInput={(levelDb) => setRhythm({ ...rhythm, levelDb })} />
+                </>
+              )}
+              <p class="tiny faint">Rates used in studies: relax 4–7 Hz (or ~10), sleep 0.25–4 Hz, focus 14–20 Hz. 40 Hz binaural is not offered: it's at the edge of what people can perceive.</p>
+            </>
+          )}
+        </>
+      )}
       <button class="btn block" onClick={onClose}>Done</button>
     </Sheet>
   );

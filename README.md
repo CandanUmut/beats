@@ -2,7 +2,7 @@
 
 An experimental, free, open-source sound and breathing tool that runs entirely in the browser.
 
-It brings together the best-supported self-help methods for five goals: **calm down**, **ride an urge**, **relax**, **sleep** and **focus**. Every part is labeled with how strong its evidence is, and there's a built-in Experiment Lab (in progress) for testing, blinded, what actually helps you.
+It brings together the best-supported self-help methods for five goals: **calm down**, **ride an urge**, **relax**, **sleep** and **focus**. Every part is labeled with how strong its evidence is, and there's a built-in Experiment Lab for testing, blinded, what actually helps you.
 
 > This is a wellness and music tool, not a medical device. See [SAFETY.md](SAFETY.md).
 
@@ -10,6 +10,9 @@ It brings together the best-supported self-help methods for five goals: **calm d
 
 - **Guided flows**: Calm down (step away, then breathing, then calm music), Ride an urge (15-minute urge-surfing timer with prompts and check-ins), Relax, Sleep wind-down (fades out on its own), Focus blocks, Breathe practice (slow breathing or cyclic sighing), Movement break.
 - **Sound engine**: generative music and noise (made by the app's own code), or your own file (decoded locally, never uploaded). Breathing swell, loudness normalized to −20 LUFS, true-peak limiter at −1 dBTP, WAV export.
+- **Experiment Lab**: test one part at a time (binaural beat vs sham, pulse vs sham, breathing guide on/off, sound A vs B). Locked plan, hidden randomized blocks of 4 (ABBA/BAAB), before/after ratings, optional 2-minute reaction-time test, condition guesses, results only at the end: paired difference with 95% CI, permutation test, blinding accuracy and a plain verdict.
+- **Rhythm layer (experimental, off by default)**: power-matched pulse (works on speakers) or binaural carriers (headphones). Not offered in the Calm and Urge flows.
+- **Works offline** as a PWA.
 - **Evidence badges** on every goal, with "Why?" pages that include null and negative results. Myths page.
 - **Safety**: first-run safety screen, left/right and stereo checks, level calibration, help lines, weekly listening log, gentle nudges toward real support. Nothing flashes.
 - **Private**: no server, no accounts, no analytics. Data lives in IndexedDB on your device, with CSV export.
