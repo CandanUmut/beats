@@ -525,7 +525,7 @@ Primary studies and reviews named in the text are the ones to rely on. Some link
 - https://dspace.lib.uom.gr/handle/2159/24458 (Asimakopoulos 2020 thesis)
 - https://onlineconferenceformusictherapy.com/sessions/binaural-beats-in-music-therapy-interventions-for-substance-addiction-treatment/
 - https://www.science.org/doi/10.1126/scitranslmed.abo2044 (Grover et al. 2023, tACS)
-- https://pubmed.ncbi.nlm.nih.gov/38319068/ (Chuderski et al. 2024, tACS working memory)
+- https://pubmed.ncbi.nlm.nih.gov/38319068/ (Lin et al. 2024, binaural-beat music and sleep in older adults; corrected label)
 - https://link.springer.com/10.1007/s12264-023-01165-z
 - https://alz-journals.onlinelibrary.wiley.com/doi/10.1002/alz.70792
 - https://gamma40.health/
