@@ -4,7 +4,7 @@ import { MOOD_BY_ID, type MoodId } from '../../data/moods';
 import { recipeFor } from '../../data/settings';
 import { newCheckIn, saveCheckIn, type CheckIn } from '../../data/checkins';
 import { Icon, MoodGlyph, Rating, Seg, TopBar, fmtTime, helpOpen } from '../components';
-import { Player } from '../Player';
+import { Player, autoplay } from '../Player';
 import { go } from '../router';
 
 function Head({ mood, kicker }: { mood: MoodId; kicker?: string }) {
@@ -83,16 +83,19 @@ export function Calm() {
       {step === 0 && (
         <>
           <Head mood="calm" />
-          <details class="card tight intro-card">
-            <summary><span>First, step away. Nothing needs a reply right now.<div class="tiny faint" style="font-weight:500">Rate how heated you feel (optional)</div></span> <Icon name="chevdown" size={16} /></summary>
-            <div class="field-head"><span>How heated do you feel? <span class="faint">(optional)</span></span></div>
-            <Rating label="Before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="calm" high="boiling" />
-          </details>
           <Player
             moodId="calm"
+            note="Step away if you can. Nothing needs a reply right now."
             guide={(t) => (t < 180 ? CALM_LINES[Math.floor(t / 30) % CALM_LINES.length] : t < 220 ? 'Now let the music carry you.' : null)}
             onFinish={(s) => { ci.current.minutes = Math.round(s / 60); setSecs(s); setStep(1); }}
-          />
+          >
+            {(_, playing) => !playing && (
+              <details class="card tight intro-card rate-card">
+                <summary><span>Rate how heated you feel <span class="faint">(optional)</span></span> <Icon name="chevdown" size={16} /></summary>
+                <Rating label="Before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="calm" high="boiling" />
+              </details>
+            )}
+          </Player>
         </>
       )}
       {step === 1 && (
@@ -109,6 +112,7 @@ export function Calm() {
             )}
           </div>
           <div class="btn-row">
+            <button class="btn" onClick={() => { autoplay.mood = 'calm'; setStep(0); }}>Another round</button>
             <button class="btn" onClick={() => go('/move')}><Icon name="walk" /> Walk it off</button>
             <button class="btn" onClick={() => (helpOpen.value = true)}><Icon name="heart" /> Talk to someone</button>
           </div>
@@ -150,19 +154,20 @@ export function Urge() {
       {step < 2 && (
         <>
           <Head mood="grounded" />
-          <details class="card tight intro-card">
-            <summary><span>{plan ? `My plan: ${plan}` : 'Urges peak and pass. Your only job is to wait.'}<div class="tiny faint" style="font-weight:500">Rate the urge, make a plan (optional)</div></span> <Icon name="chevdown" size={16} /></summary>
-            <div class="field-head" style="margin-top:10px"><span>How strong is the urge?</span></div>
-            <Rating label="Urge before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="none" high="overwhelming" />
-            <div class="field-head" style="margin-top:14px"><span>While I wait, I'll…</span></div>
-            <textarea value={plan} placeholder="My plan" onInput={(e) => { setPlan((e.target as HTMLTextAreaElement).value); ci.current.plan = (e.target as HTMLTextAreaElement).value; }} />
-            <div class="chips" style="margin-top:8px">
-              {PLAN_IDEAS.map((p) => <button class="chip" onClick={() => { const v = plan ? `${plan}, ${p.toLowerCase()}` : p; setPlan(v); ci.current.plan = v; }}>{p}</button>)}
-            </div>
-          </details>
-          <Player moodId="grounded" onFinish={() => { ci.current.during = during; setStep(2); }}>
+          <Player moodId="grounded" note="Urges peak and pass. Your only job is to wait." onFinish={() => { ci.current.during = during; setStep(2); }}>
             {(t, playing) => {
-              if (!playing) return null;
+              if (!playing) return (
+                <details class="card tight intro-card rate-card">
+                  <summary><span>{plan ? `My plan: ${plan}` : 'Rate the urge, make a plan'}{!plan && <span class="faint"> (optional)</span>}</span> <Icon name="chevdown" size={16} /></summary>
+                  <div class="field-head" style="margin-top:10px"><span>How strong is the urge?</span></div>
+                  <Rating label="Urge before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="none" high="overwhelming" />
+                  <div class="field-head" style="margin-top:14px"><span>While I wait, I'll…</span></div>
+                  <textarea value={plan} placeholder="My plan" onInput={(e) => { setPlan((e.target as HTMLTextAreaElement).value); ci.current.plan = (e.target as HTMLTextAreaElement).value; }} />
+                  <div class="chips" style="margin-top:8px">
+                    {PLAN_IDEAS.map((p) => <button class="chip" onClick={() => { const v = plan ? `${plan}, ${p.toLowerCase()}` : p; setPlan(v); ci.current.plan = v; }}>{p}</button>)}
+                  </div>
+                </details>
+              );
               if (step === 0) setTimeout(() => setStep(1), 0);
               const current = [...URGE_PROMPTS].reverse().find((p) => t >= p.at) ?? URGE_PROMPTS[0];
               const rated = during.some((d) => d.t >= current.at && d.t < current.at + 120);

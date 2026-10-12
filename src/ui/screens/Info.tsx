@@ -144,8 +144,10 @@ export function Settings() {
     <div class="accent-relax">
       <TopBar title="Settings" />
       <h1>Settings</h1>
+
+      <h2 class="set-head">Sound</h2>
       <VolumeCard />
-      <p class="tiny faint" style="margin:-4px 4px 10px">Soft is best: you should still hear someone talk to you. Your phone also has a loudness limiter: on iPhone, Settings → Sounds & Haptics → Headphone Safety → Reduce Loud Audio; on Android, look for a media volume limiter.</p>
+      <p class="tiny faint" style="margin:-4px 4px 10px">Soft is best: you should still hear someone talk to you.</p>
       <div class="card">
         <h3 style="margin-top:0">Listening this week</h3>
         <div class="field-head"><span>{hours.toFixed(1)} h of a safe {budget.toFixed(0)} h</span></div>
@@ -153,51 +155,53 @@ export function Settings() {
         <details class="more">
           <summary>How this is calculated</summary>
           <Slider label="Assumed level" value={s.assumedDb} min={75} max={89} step={1} format={(v) => `${v} dB(A) → ${weeklyBudgetHours(v).toFixed(0)} h/week`} onInput={(assumedDb) => updateSettings({ assumedDb })} />
-          <p class="tiny faint" style="margin:0">Based on the WHO-ITU safe-listening reference (80 dB for 40 h a week; every +3 dB halves it). A browser can't measure how loud it really is in your ears, so this assumes a conservative level.</p>
+          <p class="tiny faint" style="margin:0">Based on the WHO-ITU safe-listening reference (80 dB for 40 h a week; every +3 dB halves it). A browser can't measure how loud it really is in your ears, so this assumes a conservative level. Your phone also has a loudness limiter: on iPhone, Settings → Sounds & Haptics → Headphone Safety → Reduce Loud Audio; on Android, look for a media volume limiter.</p>
         </details>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Find my sound</h3>
-        <p class="tiny faint" style="margin-top:0">A two-minute listening test for each mood.</p>
+        <h3 style="margin-top:0">Headphones</h3>
+        <p class="small muted" style="margin-top:0">
+          Left/right: <b>{s.headphones.lr ?? 'not checked'}</b> · Stereo: <b>{s.headphones.mono ?? 'not checked'}</b>
+        </p>
+        <button class="btn small" onClick={() => go('/recheck')}>Run headphone checks again</button>
+      </div>
+
+      <h2 class="set-head">Your moods</h2>
+      <div class="card">
+        <p class="tiny faint" style="margin-top:0">Open one to find your sound with a two-minute listening test.</p>
         {MOODS.map((m) => (
           <div class="row-link" role="button" tabIndex={0} onClick={() => go(`/tune/${m.id}`)}>
             <span>{m.name}</span>
             <span style="display:flex;align-items:center;gap:10px">
-              <span class="small" style={{ color: isCustom(m.id) ? 'var(--accent)' : 'var(--faint)' }}>{isCustom(m.id) ? 'Yours' : 'Suggested'}</span>
+              {isCustom(m.id) && <span class="small" style="color:var(--accent)">Yours</span>}
               {isCustom(m.id) && <button class="link-btn" onClick={(e) => { e.stopPropagation(); resetRecipe(m.id); }}>Reset</button>}
               <Icon name="chev" />
             </span>
           </div>
         ))}
       </div>
+
+      <h2 class="set-head">Look and feel</h2>
+      <div class="card">
+        <Toggle label="Music strip under the painting" hint="Piano keys or strings that light up with the notes" checked={s.musicStrip} onChange={(musicStrip) => updateSettings({ musicStrip })} />
+        <Toggle label="Vibrate on each breath" hint="Android only" checked={s.vibrate} onChange={(vibrate) => updateSettings({ vibrate })} />
+        <p class="tiny faint" style="margin-bottom:0">Animations move slowly and never flash. If your device asks for reduced motion, they hold still.</p>
+      </div>
       <div class="card">
         <h3 style="margin-top:0">The cat</h3>
-        <Toggle label="Cat companion" hint="He wanders, naps, eats and shows you around the first time. Tap or stroke him to pet him." checked={s.cat} onChange={(cat) => updateSettings({ cat })} />
-        <Toggle label="Cat sounds" hint="Soft purrs and the odd meow" checked={s.catSounds} onChange={(catSounds) => updateSettings({ catSounds })} />
+        <Toggle label="Cat companion" hint="He loafs, naps, eats and shows you around the first time. Tap or stroke him to pet him." checked={s.cat} onChange={(cat) => updateSettings({ cat })} />
+        <Toggle label="Cat sounds" hint="A real cat's purr and the odd meow" checked={s.catSounds} onChange={(catSounds) => updateSettings({ catSounds })} />
         {s.cat && <button class="btn small" onClick={petTheCat}>Pet the cat</button>}
       </div>
-      <div class="card">
-        <h3 style="margin-top:0">Visuals</h3>
-        <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Lamp' }]} />
-        <p class="tiny faint" style="margin-bottom:0">Animations move slowly and never flash. If your device asks for reduced motion, the falling notes are turned off.</p>
-      </div>
+
+      <h2 class="set-head">Help and data</h2>
       <div class="card">
         <h3 style="margin-top:0">Help lines region</h3>
         <Seg value={s.region} onChange={(region) => updateSettings({ region })} label="Region" options={REGIONS.map((r) => ({ v: r.id, label: r.name }))} />
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Breathing</h3>
-        <Toggle label="Vibrate on each breath" hint="Android only" checked={s.vibrate} onChange={(vibrate) => updateSettings({ vibrate })} />
-      </div>
-      <div class="card">
-        <h3 style="margin-top:0">Checks</h3>
-        <p class="small muted" style="margin-top:0">
-          Left/right: <b>{s.headphones.lr ?? 'not checked'}</b> · Stereo: <b>{s.headphones.mono ?? 'not checked'}</b>
-        </p>
-        <button class="btn small" onClick={() => go('/recheck')}>Run headphone checks again</button>
-      </div>
-      <div class="card">
         <h3 style="margin-top:0">Your data</h3>
+        <p class="tiny faint" style="margin-top:0">Everything stays on this device.</p>
         <div class="btn-row">
           <button class="btn small" onClick={() => go('/log')}><Icon name="chart" size={18} /> History</button>
           <button class="btn small" onClick={exportAll}><Icon name="download" size={18} /> Export CSV</button>
@@ -215,8 +219,6 @@ export function Settings() {
         )}
       </div>
       <button class="row-link" onClick={() => go('/lab')}><span>Experiment Lab</span><Icon name="chev" /></button>
-      <button class="row-link" onClick={() => go('/about')}><span>About & disclaimer</span><Icon name="chev" /></button>
-      <button class="row-link" onClick={() => go('/evidence')}><span>Research</span><Icon name="chev" /></button>
     </div>
   );
 }

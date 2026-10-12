@@ -1,25 +1,36 @@
 // The cat: a small ginger companion who lives along the bottom of the screen.
-// He wanders, sits, grooms, yawns, stretches, eats and naps. During a session
-// he curls up and sleeps. Pet him and he purrs. He never talks, only meows,
-// and he walks over to whatever matters on each screen to show you around.
+// Mostly he loafs, blinks and watches your finger. Every couple of minutes he
+// does one thing: wanders, grooms, yawns and stretches, eats, naps, or (now and
+// then, on Home) chases a butterfly. During a session he kneads, curls up and
+// sleeps, breathing at your pace. Pet him and he purrs; pet him a lot and he
+// rolls over. He never talks, only meows, and the first time you open a
+// screen he walks over to the thing to tap.
 
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { route } from './router';
 import { settings, updateSettings } from '../data/settings';
 import { meow, purr } from '../audio/catSounds';
+import * as engine from '../audio/engine';
+import { breathAt, type BreathPattern } from '../audio/dsp/breath';
 
-type Pose = 'sit' | 'walk' | 'sleep' | 'yawn' | 'eat' | 'groom' | 'stretch' | 'petted' | 'look';
+type Pose =
+  | 'loaf' | 'sit' | 'look' | 'walk' | 'curl' | 'yawn' | 'stretch' | 'groom'
+  | 'eat' | 'petted' | 'knead' | 'crouch' | 'pounce' | 'roll';
 
-const W = 96; // rendered cat width, px
-const SPEED = 46; // px per second
+interface Step { pose: Pose; dur?: number; to?: number; dir?: 1 | -1 }
 
-const C = {
-  fur: '#df9a5b',
-  dark: '#b9733c',
-  cream: '#f4dcb8',
-  eye: '#2a1d14',
-  nose: '#d98a7e',
-  inner: '#e9a99a',
+const W = 100; // rendered cat width, px
+const SPEED = 44; // px per second
+
+const F = {
+  fur: '#eba667',
+  dark: '#c9793d',
+  line: '#9a5527',
+  cream: '#fae8cc',
+  ear: '#f2b2a4',
+  nose: '#e3837c',
+  eye: '#2b1d14',
+  blush: '#f39a8c',
   bowl: '#8fa7c6',
 };
 
@@ -29,8 +40,19 @@ interface State {
   dir: 1 | -1;
   until: number;
   targetX: number | null;
-  next: Pose | null;
   since: number;
+  queue: Step[];
+  nextEvent: number;
+  pets: number[];
+  slowBlink: number;
+}
+
+// --- Breathing along with the session --------------------------------------
+
+let sessionPattern: BreathPattern | null = null;
+/** The player tells the cat the breathing pattern while a session runs. */
+export function setCatBreath(p: BreathPattern | null): void {
+  sessionPattern = p;
 }
 
 /** Where the cat goes to "show you around" (once per screen, ever). Not on
@@ -45,6 +67,14 @@ function guideFor(r: string): { key: string; sel: string } | null {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const inSession = () => document.documentElement.classList.contains('in-session');
+const hour = () => new Date().getHours();
+
+function chasedToday(): boolean {
+  try { return localStorage.getItem('steady-cat-chase') === new Date().toDateString(); } catch { return true; }
+}
+function markChased(): void {
+  try { localStorage.setItem('steady-cat-chase', new Date().toDateString()); } catch { /* fine */ }
+}
 
 function useReducedMotion(): boolean {
   const q = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -63,21 +93,27 @@ export function petTheCat(): void {
   window.dispatchEvent(new Event('steady:pet-cat'));
 }
 
+function bowlX(fw: number): number {
+  return Math.max(6, fw * 0.05);
+}
+
 export function Cat() {
   const s = settings.value;
   const on = s.cat;
   const still = useReducedMotion();
   const [, force] = useState(0);
   const [ducked, setDucked] = useState(false);
-  const st = useRef<State>({ pose: 'walk', x: -W, dir: 1, until: 0, targetX: 60, next: 'sit', since: 0 });
+  const st = useRef<State>({ pose: 'loaf', x: 70, dir: -1, until: Infinity, targetX: null, since: 0, queue: [], nextEvent: performance.now() / 1000 + 8, pets: [], slowBlink: -10 });
   const t = useRef(0);
   const floor = useRef<HTMLDivElement>(null);
   const hearts = useRef<{ id: number; x: number; born: number }[]>([]);
+  const fly = useRef<{ x: number; y: number; vx: number; vy: number; on: boolean } | null>(null);
+  const pointer = useRef<{ x: number; y: number; at: number } | null>(null);
+  const breath = useRef(0.5);
   const lastPurr = useRef(0);
   const lastMeow = useRef(0);
   const blink = useRef(0);
   const stroke = useRef({ x: 0, acc: 0, at: 0 });
-  // Read through refs so a volume change doesn't restart the loop.
   const sounds = useRef(s.catSounds);
   const vol = useRef(s.volume);
   const stillRef = useRef(still);
@@ -85,10 +121,18 @@ export function Cat() {
   vol.current = s.volume;
   stillRef.current = still;
 
-  // Reduced motion: no entrance walk, he's simply sitting there.
   useEffect(() => {
-    if (still) Object.assign(st.current, { pose: 'sit', x: 60, targetX: null, next: null, until: performance.now() / 1000 + 20 });
+    if (still) Object.assign(st.current, { pose: 'loaf', targetX: null, queue: [], until: Infinity });
   }, [still]);
+
+  // Eyes follow your finger or cursor.
+  useEffect(() => {
+    if (!on) return;
+    const mv = (e: PointerEvent) => { pointer.current = { x: e.clientX, y: e.clientY, at: performance.now() }; };
+    window.addEventListener('pointermove', mv, { passive: true });
+    window.addEventListener('pointerdown', mv, { passive: true });
+    return () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerdown', mv); };
+  }, [on]);
 
   // Behaviour loop.
   useEffect(() => {
@@ -96,21 +140,48 @@ export function Cat() {
     let raf = 0;
     let prev = performance.now();
     let drawn = 0;
-    const pick = (now: number) => {
-      const c = st.current;
+    let wasSession = false;
+
+    const begin = (c: State, step: Step, sec: number) => {
+      if (step.to !== undefined) {
+        Object.assign(c, { pose: 'walk', targetX: step.to, since: sec, until: Infinity });
+      } else {
+        Object.assign(c, { pose: step.pose, since: sec, until: step.dur === undefined ? Infinity : sec + step.dur, targetX: null });
+        if (step.dir) c.dir = step.dir;
+      }
+    };
+    const advance = (c: State, sec: number) => {
+      const next = c.queue.shift();
+      if (next) begin(c, next, sec);
+      else {
+        Object.assign(c, { pose: 'loaf', until: Infinity, targetX: null, since: sec });
+        // One small event every two to three minutes; otherwise he loafs.
+        c.nextEvent = sec + 110 + Math.random() * 70;
+      }
+    };
+    const pickEvent = (c: State, sec: number) => {
       const fw = floor.current?.clientWidth ?? 360;
       const r = Math.random();
-      const after = (sec: number) => now / 1000 + sec;
-      // Reduced motion: no wandering, just sitting and napping.
-      if (stillRef.current) Object.assign(c, r < 0.6 ? { pose: 'sit', until: after(20) } : { pose: 'sleep', until: after(40) });
-      else if (r < 0.28) Object.assign(c, { pose: 'sit', until: after(5 + Math.random() * 5) });
-      else if (r < 0.42) Object.assign(c, { pose: 'groom', until: after(4) });
-      else if (r < 0.64) Object.assign(c, { pose: 'walk', targetX: 10 + Math.random() * (fw - W - 20), next: 'sit' });
-      else if (r < 0.72) Object.assign(c, { pose: 'yawn', until: after(2.6) });
-      else if (r < 0.84) Object.assign(c, { pose: 'walk', targetX: bowlX(fw) + 22, next: 'eat' });
-      else Object.assign(c, { pose: 'sleep', until: after(22 + Math.random() * 20) });
-      c.since = now / 1000;
+      const night = hour() >= 22 || hour() < 6;
+      const home = route.value === '/';
+      const spot = 20 + Math.random() * (fw - W - 40);
+      let q: Step[];
+      if (night && r < 0.7) q = [{ pose: 'knead', dur: 2.5 }, { pose: 'curl', dur: 60 + Math.random() * 60 }, { pose: 'stretch', dur: 2.5 }];
+      else if (home && !chasedToday() && r < 0.18) {
+        markChased();
+        const dir: 1 | -1 = c.x < fw / 2 ? 1 : -1;
+        fly.current = { x: c.x + W / 2 + dir * 160, y: 30, vx: 0, vy: 0, on: true };
+        q = [{ pose: 'look', dur: 1.6, dir }, { pose: 'crouch', dur: 1.8, dir }, { pose: 'pounce', dur: 0.7, dir }, { pose: 'look', dur: 2.2, dir }];
+      }
+      else if (r < 0.35) q = [{ pose: 'walk', to: spot }, { pose: 'sit', dur: 5 }];
+      else if (r < 0.5) q = [{ pose: 'groom', dur: 4.5 }];
+      else if (r < 0.65) q = [{ pose: 'yawn', dur: 2.4 }, { pose: 'stretch', dur: 2.6 }];
+      else if (r < 0.82) q = [{ pose: 'walk', to: bowlX(fw) + 26 }, { pose: 'eat', dur: 6, dir: -1 }];
+      else q = [{ pose: 'knead', dur: 2.5 }, { pose: 'curl', dur: 30 + Math.random() * 40 }, { pose: 'stretch', dur: 2.5 }];
+      c.queue = q;
+      advance(c, sec);
     };
+
     const frame = (now: number) => {
       const dt = Math.min(0.1, (now - prev) / 1000);
       prev = now;
@@ -119,9 +190,11 @@ export function Cat() {
       const sec = now / 1000;
       const fw = floor.current?.clientWidth ?? 360;
       const session = inSession();
-      // During a session the cat naps beside you.
-      if (session && c.pose !== 'sleep' && c.pose !== 'petted') Object.assign(c, { pose: 'sleep', until: sec + 3600, targetX: null, since: sec });
-      if (!session && c.pose === 'sleep' && c.until > sec + 1000) Object.assign(c, { pose: 'stretch', until: sec + 2.5, since: sec });
+      // Into a session: knead, then curl up and breathe along. Out: stretch, slow blink.
+      if (session && !wasSession) { c.queue = [{ pose: 'curl' }]; begin(c, { pose: 'knead', dur: 2.6 }, sec); fly.current = null; }
+      if (!session && wasSession) { c.queue = [{ pose: 'sit', dur: 4 }]; begin(c, { pose: 'stretch', dur: 2.6 }, sec); c.slowBlink = sec + 2.8; }
+      wasSession = session;
+      breath.current = session && sessionPattern ? breathAt(sessionPattern, engine.sessionTime()).level : 0.5;
 
       if (c.pose === 'walk' && c.targetX !== null) {
         const d = c.targetX - c.x;
@@ -130,26 +203,30 @@ export function Cat() {
         if (Math.abs(d) <= step) {
           c.x = c.targetX;
           c.targetX = null;
-          const nx = c.next ?? 'sit';
-          c.pose = nx;
-          c.since = sec;
-          c.until = sec + 6;
-          if (nx === 'eat') c.dir = -1;
-          if (nx === 'look' && sounds.current && !session && sec - lastMeow.current > 6) { lastMeow.current = sec; void meow(vol.current); }
-          c.next = null;
+          advance(c, sec);
+          if ((c.pose as Pose) === 'look' && c.queue.length === 0 && sounds.current && !session && sec - lastMeow.current > 6) { lastMeow.current = sec; void meow(vol.current); }
         } else c.x += Math.sign(d) * step;
-      } else if (c.pose !== 'sleep' || !session) {
-        if (sec > c.until) {
-          if (c.pose === 'sleep') Object.assign(c, { pose: 'stretch', until: sec + 2.5, since: sec });
-          else pick(now);
-        }
+      } else if (c.pose === 'pounce') {
+        const f = fly.current;
+        if (f) c.x += (f.x - W / 2 - c.x) * Math.min(1, dt * 3);
+        if (sec > c.until) advance(c, sec);
+      } else if (sec > c.until) advance(c, sec);
+      else if (c.pose === 'loaf' && !session && !stillRef.current && sec > c.nextEvent && !document.documentElement.classList.contains('sheet-open')) pickEvent(c, sec);
+
+      // The butterfly: hovers, then darts away when he pounces.
+      const f = fly.current;
+      if (f?.on) {
+        if (c.pose === 'pounce' || (c.pose === 'look' && sec - c.since > 0.3 && c.queue.length === 0)) { f.vy += 40 * dt; f.vx += c.dir * 25 * dt; }
+        f.x += f.vx * dt + Math.sin(sec * 3) * 0.6;
+        f.y += f.vy * dt + Math.cos(sec * 4) * 0.4;
+        if (f.y > 260 || f.x < -40 || f.x > fw + 40) fly.current = null;
       }
-      // Walking may start off-screen (his entrance); otherwise stay on the floor.
-      if (c.pose !== 'walk') c.x = clamp(c.x, 0, fw - W);
+
+      if (c.pose !== 'walk' && c.pose !== 'pounce') c.x = clamp(c.x, 0, fw - W);
       if (Math.random() < dt / 4) blink.current = sec;
       hearts.current = hearts.current.filter((h) => sec - h.born < (stillRef.current ? 1 : 1.6));
-      // Redraw at a rate that fits what he's doing: smooth when walking, slow when asleep.
-      const fps = stillRef.current ? 2 : c.pose === 'walk' || hearts.current.length ? 60 : c.pose === 'sleep' ? 8 : 24;
+      const busy = c.pose === 'walk' || c.pose === 'pounce' || c.pose === 'crouch' || hearts.current.length || fly.current;
+      const fps = stillRef.current ? 2 : busy ? 60 : c.pose === 'curl' ? 12 : 24;
       if (now - drawn >= 1000 / fps - 4) { drawn = now; force((n) => (n + 1) % 1e6); }
       raf = requestAnimationFrame(frame);
     };
@@ -172,9 +249,10 @@ export function Cat() {
       const fr = fl.getBoundingClientRect();
       const target = clamp(er.left + er.width / 2 - fr.left - W / 2, 0, fl.clientWidth - W);
       updateSettings({ catGuided: [...settings.value.catGuided, g.key] });
+      const c = st.current;
       const sec = performance.now() / 1000;
-      if (stillRef.current) Object.assign(st.current, { pose: 'look', x: target, targetX: null, until: sec + 6, since: sec });
-      else Object.assign(st.current, { pose: 'walk', targetX: target, next: 'look', since: sec });
+      if (stillRef.current) Object.assign(c, { pose: 'look', x: target, targetX: null, until: sec + 6, since: sec, queue: [] });
+      else { c.queue = [{ pose: 'look', dur: 5 }]; Object.assign(c, { pose: 'walk', targetX: target, since: sec, until: Infinity }); }
     }, 1400);
     return () => clearTimeout(id);
   }, [route.value, on]);
@@ -196,12 +274,23 @@ export function Cat() {
   function pet(tap: boolean) {
     const c = st.current;
     const sec = performance.now() / 1000;
-    if (c.pose !== 'sleep') Object.assign(c, { pose: 'petted', until: sec + 2.6, targetX: null, since: sec });
-    else c.until = Math.max(c.until, sec + 8);
+    const session = inSession();
+    c.pets = [...c.pets.filter((p) => sec - p < 10), sec];
+    if (c.pose === 'curl') c.until = Math.max(c.until, sec + 8);
+    else if (!stillRef.current && c.pets.length >= 6 && c.pose !== 'roll') {
+      // Lots of love: he rolls over for a belly rub.
+      c.pets = [];
+      c.queue = [{ pose: 'sit', dur: 2 }];
+      Object.assign(c, { pose: 'roll', until: sec + 3.5, targetX: null, since: sec });
+    } else if (c.pose !== 'roll') {
+      c.queue = [];
+      Object.assign(c, { pose: 'petted', until: sec + 2.8, targetX: null, since: sec });
+      c.slowBlink = sec + 1.2;
+    }
     // No cat sounds over a running session.
-    const quiet = !sounds.current || inSession();
-    if (!quiet && sec - lastPurr.current > 2.4) { lastPurr.current = sec; void purr(2.6, vol.current); }
-    if (!quiet && tap && c.pose !== 'sleep' && Math.random() < 0.3 && sec - lastMeow.current > 4) { lastMeow.current = sec; void meow(vol.current); }
+    const quiet = !sounds.current || session;
+    if (!quiet) { lastPurr.current = sec; void purr(3, vol.current); }
+    if (!quiet && tap && c.pose !== 'curl' && Math.random() < 0.3 && sec - lastMeow.current > 4) { lastMeow.current = sec; void meow(vol.current); }
     if (hearts.current.length < 6) hearts.current.push({ id: Math.random(), x: c.x + W / 2 + (Math.random() - 0.5) * 30, born: sec });
   }
   const petRef = useRef(pet);
@@ -228,6 +317,22 @@ export function Cat() {
   const real = t.current;
   const sec = still ? 0 : real; // reduced motion: the animation clock stands still
   const fw = floor.current?.clientWidth ?? 360;
+
+  // Where his eyes look: toward a nearby finger or cursor, or up at a butterfly.
+  let look: [number, number] = [0, 0];
+  const fr = floor.current?.getBoundingClientRect();
+  const headX = (fr?.left ?? 0) + c.x + (c.dir === 1 ? 0.66 : 0.34) * W;
+  const headY = (fr?.top ?? 0) + 30;
+  const pt = pointer.current;
+  if (fly.current && fr) look = [clamp((fr.left + fly.current.x - headX) / 60, -1, 1) * c.dir, -1];
+  else if (c.pose === 'look') look = [0.3, -1];
+  else if (pt && performance.now() - pt.at < 4000 && Math.hypot(pt.x - headX, pt.y - headY) < 220) {
+    look = [clamp((pt.x - headX) / 80, -1, 1) * c.dir, clamp((pt.y - headY) / 80, -1, 1)];
+  }
+  const blinking = !still && real - blink.current < 0.16;
+  const sb = real - c.slowBlink;
+  const slow = sb > 0 && sb < 1.4 ? Math.sin((sb / 1.4) * Math.PI) : 0;
+
   return (
     <div class={`cat-floor${ducked ? ' ducked' : ''}`} ref={floor}>
       <Bowl x={bowlX(fw)} />
@@ -243,16 +348,17 @@ export function Cat() {
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pet(true); } }}
       >
         <svg viewBox="0 0 120 90" width={W} height={W * 0.75} style={{ transform: `scaleX(${c.dir})` }} aria-hidden="true">
-          <CatBody pose={c.pose} t={sec} since={c.since} blinking={!still && real - blink.current < 0.16} still={still} />
+          <CatBody pose={c.pose} t={sec} age={real - c.since} blink={blinking ? 1 : slow} look={look} breath={breath.current} still={still} />
         </svg>
       </button>
+      {fly.current && !still && <Butterfly x={fly.current.x} y={fly.current.y} t={real} />}
       {hearts.current.map((h) => {
         const age = real - h.born;
         const rise = still ? 10 : Math.min(40, age * 40);
         const fade = still ? 1 : Math.max(0, 1 - age / 1.6);
         return (
-          <svg class="cat-heart" viewBox="0 0 20 18" aria-hidden="true" style={{ left: `${h.x}px`, bottom: `${58 + rise}px`, opacity: String(fade) }} key={h.id}>
-            <path d="M10 17s-8-5-8-10a4.2 4.2 0 0 1 8-2 4.2 4.2 0 0 1 8 2c0 5-8 10-8 10z" fill="#e9a0a0" />
+          <svg class="cat-heart" viewBox="0 0 20 18" aria-hidden="true" style={{ left: `${h.x}px`, bottom: `${62 + rise}px`, opacity: String(fade) }} key={h.id}>
+            <path d="M10 17s-8-5-8-10a4.2 4.2 0 0 1 8-2 4.2 4.2 0 0 1 8 2c0 5-8 10-8 10z" fill="#ec9c9c" />
           </svg>
         );
       })}
@@ -260,67 +366,126 @@ export function Cat() {
   );
 }
 
-function bowlX(fw: number): number {
-  return Math.max(6, fw * 0.06);
-}
+// --- Drawing ----------------------------------------------------------------
 
 function Bowl({ x }: { x: number }) {
   return (
     <svg class="cat-bowl" viewBox="0 0 40 16" style={{ left: `${x}px` }} aria-hidden="true">
-      <ellipse cx="20" cy="5" rx="15" ry="3" fill="#c98a52" />
-      <path d="M4 5h32l-4 10H8z" fill={C.bowl} />
+      <ellipse cx="20" cy="5" rx="14" ry="3" fill="#b77a45" />
+      <circle cx="15" cy="4" r="2" fill="#9a6232" /><circle cx="21" cy="3.5" r="2" fill="#a86c3a" /><circle cx="26" cy="4.5" r="1.8" fill="#9a6232" />
+      <path d="M4 5h32l-4 10H8z" fill={F.bowl} />
+      <path d="M8 8h24" stroke="#c9d6e6" stroke-width="1.2" />
       <ellipse cx="20" cy="5" rx="16" ry="2.4" fill="none" stroke="#a9bcd6" stroke-width="1.5" />
     </svg>
   );
 }
 
-function Eyes({ closed, happy, blinking }: { closed?: boolean; happy?: boolean; blinking?: boolean }) {
-  if (happy) return <g stroke={C.eye} stroke-width="1.6" fill="none" stroke-linecap="round"><path d="M-6 -2 q2.5 -3 5 0" /><path d="M4 -2 q2.5 -3 5 0" /></g>;
-  if (closed) return <g stroke={C.eye} stroke-width="1.6" fill="none" stroke-linecap="round"><path d="M-6 -2 q2.5 2 5 0" /><path d="M4 -2 q2.5 2 5 0" /></g>;
-  const ry = blinking ? 0.4 : 2.8;
+function Butterfly({ x, y, t }: { x: number; y: number; t: number }) {
+  const f = Math.abs(Math.sin(t * 12));
   return (
-    <g fill={C.eye}>
-      <ellipse cx="-3.5" cy="-2" rx="2.1" ry={ry} />
-      <ellipse cx="6.5" cy="-2" rx="2.1" ry={ry} />
-      {!blinking && <><circle cx="-2.8" cy="-3" r="0.7" fill="#fff" /><circle cx="7.2" cy="-3" r="0.7" fill="#fff" /></>}
+    <svg class="cat-fly" viewBox="-10 -8 20 16" style={{ left: `${x - 10}px`, bottom: `${y}px` }} aria-hidden="true">
+      <ellipse cx={-4 * f - 0.5} cy="-1" rx={4 * f + 0.6} ry="4" fill="#f2cc8f" stroke="#c98a4a" stroke-width="0.6" />
+      <ellipse cx={4 * f + 0.5} cy="-1" rx={4 * f + 0.6} ry="4" fill="#f2cc8f" stroke="#c98a4a" stroke-width="0.6" />
+      <ellipse cx={-3 * f} cy="3" rx={2.6 * f + 0.4} ry="2.4" fill="#e9a07a" />
+      <ellipse cx={3 * f} cy="3" rx={2.6 * f + 0.4} ry="2.4" fill="#e9a07a" />
+      <rect x="-0.7" y="-4" width="1.4" height="8" rx="0.7" fill="#5a3d2b" />
+    </svg>
+  );
+}
+
+type EyeMode = 'open' | 'half' | 'closed' | 'happy' | 'wide';
+
+function Eye({ x, mode, look, blink }: { x: number; mode: EyeMode; look: [number, number]; blink: number }) {
+  if (mode === 'closed') return <path d={`M${x - 3.2} -0.5 q 3.2 2.6 6.4 0`} stroke={F.eye} stroke-width="1.5" fill="none" stroke-linecap="round" />;
+  if (mode === 'happy') return <path d={`M${x - 3.2} 0.8 q 3.2 -3.6 6.4 0`} stroke={F.eye} stroke-width="1.5" fill="none" stroke-linecap="round" />;
+  const big = mode === 'wide' ? 1.15 : 1;
+  const open = mode === 'half' ? 0.45 : 1;
+  const ry = 3.7 * big * open * (1 - 0.9 * blink);
+  if (ry < 0.7) return <path d={`M${x - 3.2} -0.5 q 3.2 1.4 6.4 0`} stroke={F.eye} stroke-width="1.4" fill="none" stroke-linecap="round" />;
+  const lx = look[0] * 1.1, ly = look[1] * 0.9 * open;
+  return (
+    <g>
+      <ellipse cx={x + lx * 0.4} cy={-0.5 + (1 - open) * 1.5 + ly * 0.3} rx={3.2 * big} ry={ry} fill={F.eye} />
+      <circle cx={x + lx + 1} cy={-1.9 + ly + (1 - open) * 1.6} r={1.25 * big * Math.min(1, ry / 2)} fill="#fff" />
+      <circle cx={x + lx - 1} cy={0.9 + ly} r={0.55 * Math.min(1, ry / 2)} fill="#fff" opacity="0.8" />
     </g>
   );
 }
 
-function Head({ x, y, rot = 0, eyes, mouth = 0 }: { x: number; y: number; rot?: number; eyes: preact.JSX.Element; mouth?: number }) {
+/** A big, front-facing head: ears, stripes, a little "w" muzzle, blush. */
+function Face({ x, y, rot = 0, eyes, look = [0, 0], blink = 0, mouth = 'smile', open = 0, earTwitch = 0 }: {
+  x: number; y: number; rot?: number; eyes: EyeMode; look?: [number, number]; blink?: number;
+  mouth?: 'smile' | 'open' | 'lick' | 'none'; open?: number; earTwitch?: number;
+}) {
   return (
     <g transform={`translate(${x} ${y}) rotate(${rot})`}>
-      <path d="M-12 -4 L-11 -21 L-2 -12 Z" fill={C.fur} />
-      <path d="M3 -12 L11 -22 L13 -4 Z" fill={C.fur} />
-      <path d="M-10 -8 L-10 -17 L-5 -12 Z" fill={C.inner} />
-      <path d="M5 -12 L10 -18 L11 -8 Z" fill={C.inner} />
-      <ellipse cx="1" cy="0" rx="15" ry="13" fill={C.fur} />
-      <path d="M-4 -12 q2 4 0 7 M1 -13 q2 4 0 7 M6 -12 q2 4 0 7" stroke={C.dark} stroke-width="1.4" fill="none" stroke-linecap="round" />
-      <ellipse cx="1.5" cy="6" rx="8" ry="5.5" fill={C.cream} />
-      {eyes}
-      <path d="M0 3.4 h3 l-1.5 1.8z" fill={C.nose} />
-      {mouth > 0.05 ? (
-        <ellipse cx="1.5" cy="8" rx={2.4 * mouth + 0.5} ry={3.4 * mouth} fill="#5a2a24" />
-      ) : (
-        <path d="M1.5 5.4 q-1.6 2 -3 1 M1.5 5.4 q1.6 2 3 1" stroke={C.eye} stroke-width="0.9" fill="none" stroke-linecap="round" />
-      )}
-      <g stroke="#f7ead6" stroke-width="0.7" opacity="0.8">
-        <path d="M8 5 l11 -2 M8 7 l11 1" />
-        <path d="M-5 5 l-11 -2 M-5 7 l-11 1" />
+      <g transform={`rotate(${-earTwitch * 12} -11 -10)`}>
+        <path d="M-15.5 -3 Q -18 -20 -12.5 -24 Q -6 -18 -3 -12.5 Z" fill={F.fur} stroke={F.line} stroke-width="1.1" stroke-linejoin="round" />
+        <path d="M-13 -7.5 Q -14.5 -17 -11.8 -19.6 Q -8 -16 -6.2 -12.5 Z" fill={F.ear} />
+      </g>
+      <path d="M15.5 -3 Q 18 -20 12.5 -24 Q 6 -18 3 -12.5 Z" fill={F.fur} stroke={F.line} stroke-width="1.1" stroke-linejoin="round" />
+      <path d="M13 -7.5 Q 14.5 -17 11.8 -19.6 Q 8 -16 6.2 -12.5 Z" fill={F.ear} />
+      <ellipse cx="0" cy="0" rx="17.5" ry="14.8" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+      <path d="M-4.5 -14 q 1 3.2 0 5.6 M0 -14.6 q 1.1 3.8 0 6.6 M4.5 -14 q 1 3.2 0 5.6" stroke={F.dark} stroke-width="1.7" fill="none" stroke-linecap="round" />
+      <path d="M-17 1 l -3.5 1.5 l 3.2 1.2 M17 1 l 3.5 1.5 l -3.2 1.2" stroke={F.line} stroke-width="1" fill={F.fur} stroke-linejoin="round" />
+      <ellipse cx="-3.3" cy="6.6" rx="4.8" ry="3.8" fill={F.cream} />
+      <ellipse cx="3.3" cy="6.6" rx="4.8" ry="3.8" fill={F.cream} />
+      <ellipse cx="-10.5" cy="5" rx="3.2" ry="1.9" fill={F.blush} opacity="0.45" />
+      <ellipse cx="10.5" cy="5" rx="3.2" ry="1.9" fill={F.blush} opacity="0.45" />
+      <Eye x={-6.6} mode={eyes} look={look} blink={blink} />
+      <Eye x={6.6} mode={eyes} look={look} blink={blink} />
+      <path d="M-1.8 3.4 h 3.6 q 0 1.4 -1.8 2.2 q -1.8 -0.8 -1.8 -2.2 z" fill={F.nose} />
+      {mouth === 'open' && open > 0.05 ? (
+        <g><ellipse cx="0" cy={7.4 + 2 * open} rx={2 + 1.4 * open} ry={1 + 3.2 * open} fill="#7a2f2a" /><ellipse cx="0" cy={8.6 + 3 * open} rx={1.6 * open + 0.4} ry={1.2 * open} fill="#ee8f8f" /></g>
+      ) : mouth === 'lick' ? (
+        <ellipse cx="0" cy="8.4" rx="1.4" ry="1.8" fill="#ee8f8f" />
+      ) : mouth === 'smile' ? (
+        <path d="M0 5.4 q -1.4 2 -3 0.8 M0 5.4 q 1.4 2 3 0.8" stroke={F.line} stroke-width="0.9" fill="none" stroke-linecap="round" />
+      ) : null}
+      <g stroke="#fff8ec" stroke-width="0.7" opacity="0.85" stroke-linecap="round">
+        <path d="M8.5 5.2 l 11 -1.8 M8.5 7.2 l 11 1.2" />
+        <path d="M-8.5 5.2 l -11 -1.8 M-8.5 7.2 l -11 1.2" />
       </g>
     </g>
   );
 }
 
-function SitBody({ t, tail = 1 }: { t: number; tail?: number }) {
-  const sw = Math.sin(t * 1.6) * 5 * tail;
+/** A thick, outlined stroke (tail, legs). */
+function Limb({ d, w = 7, color = F.fur }: { d: string; w?: number; color?: string }) {
   return (
     <>
-      <path d={`M36 84 C 18 86, 10 76, 14 ${66 + sw * 0.3} C 16 ${60 + sw}, 24 ${60 + sw}, 22 ${66 + sw * 0.6}`} stroke={C.fur} stroke-width="7" fill="none" stroke-linecap="round" />
-      <path d="M34 85 C 28 60, 40 40, 57 40 C 72 40, 76 62, 72 85 Z" fill={C.fur} />
-      <path d="M42 46 q4 4 0 9 M48 43 q4 4 0 9" stroke={C.dark} stroke-width="2" fill="none" stroke-linecap="round" />
-      <ellipse cx="64" cy="62" rx="7.5" ry="13" fill={C.cream} />
-      <ellipse cx="42" cy="75" rx="13" ry="11" fill={C.dark} opacity="0.35" />
+      <path d={d} stroke={F.line} stroke-width={w + 2.2} fill="none" stroke-linecap="round" />
+      <path d={d} stroke={color} stroke-width={w} fill="none" stroke-linecap="round" />
+    </>
+  );
+}
+
+function Paw({ x, y, up = 0 }: { x: number; y: number; up?: number }) {
+  return <ellipse cx={x} cy={y - up} rx="4.6" ry="2.5" fill={F.cream} stroke={F.line} stroke-width="1" />;
+}
+
+function LoafBody({ t, tail = 1 }: { t: number; tail?: number }) {
+  const tw = Math.sin(t * 1.3) * 2 * tail;
+  return (
+    <>
+      <path d="M32 84 C 24 84 22 66 36 58 C 48 50 72 51 82 60 C 90 67 90 84 81 85 Z" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+      <path d="M42 56 q 3.5 4 0 8.5 M50 54 q 3.5 4 0 8.5 M58 54 q 3.5 4 0 8.5" stroke={F.dark} stroke-width="2.3" fill="none" stroke-linecap="round" />
+      <ellipse cx="34" cy="74" rx="8" ry="7" fill={F.dark} opacity="0.25" />
+      <ellipse cx="79" cy="73" rx="8" ry="9" fill={F.cream} />
+      <Limb d={`M34 82 C 26 ${88 + tw * 0.2} 44 ${90} ${66 + tw} 87`} w={6.5} />
+    </>
+  );
+}
+
+function SitBody({ t, tail = 1 }: { t: number; tail?: number }) {
+  const sw = Math.sin(t * 1.6) * 4 * tail;
+  return (
+    <>
+      <Limb d={`M42 84 C 20 88 12 ${74 + sw * 0.3} 20 ${64 + sw}`} w={7} />
+      <path d="M38 85 C 30 70 40 44 60 42 C 78 42 83 66 79 85 Z" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+      <ellipse cx="45" cy="74" rx="12" ry="11" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+      <path d="M40 67 q 4.5 3 3 8.5 M48 50 q 4 3 2 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+      <ellipse cx="69" cy="62" rx="8" ry="13" fill={F.cream} />
     </>
   );
 }
@@ -328,86 +493,142 @@ function SitBody({ t, tail = 1 }: { t: number; tail?: number }) {
 function FrontLegs({ raise = 0 }: { raise?: number }) {
   return (
     <>
-      <rect x="58" y="66" width="6.5" height="19" rx="3.2" fill={C.fur} />
-      <rect x="66" y={66 - raise * 22} width="6.5" height="19" rx="3.2" fill={C.fur} transform={raise ? `rotate(${-raise * 40} 69 ${70 - raise * 10})` : undefined} />
-      <ellipse cx="61" cy="85" rx="4" ry="2" fill={C.cream} />
-      {!raise && <ellipse cx="69" cy="85" rx="4" ry="2" fill={C.cream} />}
+      <rect x="61" y="64" width="7" height="21" rx="3.4" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+      <Paw x={64.5} y={85} />
+      <g transform={raise ? `rotate(${-raise * 55} 74 66)` : undefined}>
+        <rect x="70" y="64" width="7" height="21" rx="3.4" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+        <Paw x={73.5} y={85} />
+      </g>
     </>
   );
 }
 
-function CatBody({ pose, t, since, blinking, still }: { pose: Pose; t: number; since: number; blinking: boolean; still: boolean }) {
-  const age = t - since;
+export function CatBody({ pose, t, age, blink, look, breath, still }: {
+  pose: Pose; t: number; age: number; blink: number; look: [number, number]; breath: number; still: boolean;
+}) {
+  const twitch = Math.max(0, Math.sin(t * 0.7) - 0.97) * 30;
   switch (pose) {
     case 'walk': {
       const ph = t * 9;
       const leg = (x: number, p: number) => (
-        <rect x={x} y="58" width="6" height="22" rx="3" fill={C.fur} transform={`rotate(${Math.sin(ph + p) * 24} ${x + 3} 60)`} />
+        <g transform={`rotate(${Math.sin(ph + p) * 24} ${x + 3} 62)`}>
+          <rect x={x} y="60" width="6.5" height="22" rx="3.2" fill={F.fur} stroke={F.line} stroke-width="1" />
+        </g>
       );
       const bob = Math.abs(Math.sin(ph)) * 2;
       return (
         <g transform={`translate(0 ${-bob})`}>
-          {leg(38, Math.PI)}
-          {leg(68, 0)}
-          <path d={`M28 54 C 14 48, 14 ${30 + Math.sin(t * 3) * 3}, 22 ${24 + Math.sin(t * 3) * 3}`} stroke={C.fur} stroke-width="7" fill="none" stroke-linecap="round" />
-          <ellipse cx="52" cy="56" rx="28" ry="14" fill={C.fur} />
-          <path d="M40 46 q4 4 0 9 M48 44 q4 4 0 9 M56 44 q4 4 0 9" stroke={C.dark} stroke-width="2" fill="none" stroke-linecap="round" />
-          <ellipse cx="58" cy="63" rx="16" ry="6" fill={C.cream} opacity="0.7" />
-          {leg(32, 0)}
-          {leg(62, Math.PI)}
-          <Head x={86} y={36 + Math.sin(ph) * 1.2} eyes={<Eyes blinking={blinking} />} />
+          {leg(36, Math.PI)}
+          {leg(66, 0)}
+          <Limb d={`M30 56 C 16 50 14 ${34 + Math.sin(t * 3) * 3} 22 ${26 + Math.sin(t * 3) * 3}`} w={7} />
+          <ellipse cx="52" cy="58" rx="28" ry="14" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <path d="M40 46 q 4 4 0 9 M48 44.5 q 4 4 0 9 M56 44.5 q 4 4 0 9" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+          <ellipse cx="60" cy="65" rx="15" ry="5" fill={F.cream} opacity="0.8" />
+          {leg(30, 0)}
+          {leg(60, Math.PI)}
+          <Face x={86} y={38 + Math.sin(ph) * 1.2} eyes="open" look={[1, 0]} blink={blink} />
         </g>
       );
     }
-    case 'sleep': {
-      const br = 1 + Math.sin(t * 2 * Math.PI * 0.1) * 0.035;
+    case 'curl': {
+      // Breathes with you: rises a little as you breathe in.
+      const br = 1 + (breath - 0.5) * 0.09 + (still ? 0 : Math.sin(t * 2 * Math.PI * 0.08) * 0.01);
       return (
         <>
-          <g transform={`translate(56 74) scale(1 ${br}) translate(-56 -74)`}>
-            <ellipse cx="56" cy="72" rx="32" ry="15" fill={C.fur} />
-            <path d="M38 62 q4 4 0 8 M46 59 q4 4 0 8 M54 58 q4 4 0 8" stroke={C.dark} stroke-width="2" fill="none" stroke-linecap="round" />
+          <g transform={`translate(58 86) scale(1 ${br}) translate(-58 -86)`}>
+            <ellipse cx="58" cy="73" rx="32" ry="14.5" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+            <path d="M38 63 q 4 4 0 8 M46 60.5 q 4 4 0 8 M54 59.5 q 4 4 0 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
           </g>
-          <path d="M26 78 C 26 92, 74 92, 92 82" stroke={C.fur} stroke-width="7" fill="none" stroke-linecap="round" />
-          <path d="M80 86 C 86 86, 92 84, 92 82" stroke={C.dark} stroke-width="7" fill="none" stroke-linecap="round" opacity="0.5" />
-          <Head x={82} y={70} rot={12} eyes={<Eyes closed />} />
-          {!still && <text x={96 + Math.sin(t) * 2} y={50 - ((t * 6) % 18)} fill="#b9ad9c" font-size="9" font-family="Fraunces, serif" opacity={0.6 - ((t * 6) % 18) / 30}>z</text>}
+          <Face x={82} y={70} rot={14} eyes="closed" mouth="none" />
+          <Limb d="M28 80 C 28 93 76 93 96 82" w={7} />
+          {!still && <text x={100 + Math.sin(t) * 2} y={52 - ((t * 5) % 16)} fill="#c9bba6" font-size="9" font-family="Fraunces, serif" opacity={0.7 - ((t * 5) % 16) / 24}>z</text>}
         </>
       );
     }
+    case 'knead': {
+      const a = Math.max(0, Math.sin(t * 6)), b = Math.max(0, -Math.sin(t * 6));
+      return (<><LoafBody t={t} /><Paw x={74} y={85} up={a * 3} /><Paw x={84} y={85} up={b * 3} /><Face x={80} y={46} eyes="half" look={[0, 0]} blink={blink} /></>);
+    }
     case 'yawn': {
-      const m = Math.sin(Math.min(1, age / 2.4) * Math.PI);
-      return (<><SitBody t={t} /><FrontLegs /><Head x={66} y={33} rot={-22 * m} eyes={<Eyes closed />} mouth={m} /></>);
+      const m = Math.sin(Math.min(1, age / 2.2) * Math.PI);
+      return (<><SitBody t={t} /><FrontLegs /><Face x={66} y={32} rot={-18 * m} eyes="closed" mouth="open" open={m} /></>);
     }
     case 'eat': {
-      const nod = Math.sin(t * 6) * 3;
-      return (<><SitBody t={t} tail={0.4} /><FrontLegs /><Head x={74} y={50 + nod * 0.3} rot={38 + nod} eyes={<Eyes closed />} /></>);
+      const nod = still ? 0 : Math.sin(t * 6) * 2.5;
+      return (<><LoafBody t={t} tail={0.4} /><Paw x={74} y={85} /><Paw x={84} y={85} /><Face x={90} y={64 + nod * 0.3} rot={30 + nod} eyes="closed" mouth="lick" /></>);
     }
     case 'groom': {
       const lick = Math.sin(t * 7);
-      return (<><SitBody t={t} tail={0.5} /><FrontLegs raise={0.9 + lick * 0.08} /><Head x={65} y={34} rot={12 + lick * 4} eyes={<Eyes closed />} /></>);
+      return (<><SitBody t={t} tail={0.5} /><FrontLegs raise={0.9 + lick * 0.08} /><Face x={65} y={33} rot={14 + lick * 4} eyes="closed" mouth="lick" /></>);
     }
     case 'stretch': {
       const k = Math.sin(Math.min(1, age / 2.5) * Math.PI);
       return (
         <g>
-          <path d="M26 50 C 16 40, 18 26, 26 22" stroke={C.fur} stroke-width="7" fill="none" stroke-linecap="round" />
-          <g transform={`rotate(${-12 * k} 60 70)`}>
-            <ellipse cx="52" cy="60" rx="28" ry="13" fill={C.fur} />
-            <rect x="74" y="72" width="26" height="6" rx="3" fill={C.fur} />
-          </g>
-          <rect x="34" y="60" width="6.5" height="25" rx="3.2" fill={C.fur} />
-          <rect x="42" y="60" width="6.5" height="25" rx="3.2" fill={C.fur} />
-          <Head x={88} y={60 + k * 6} rot={8} eyes={<Eyes closed={k > 0.4} blinking={blinking} />} mouth={k > 0.6 ? 0.4 : 0} />
+          <Limb d={`M30 ${46 - k * 4} C 20 36 22 22 30 18`} w={7} />
+          <path d={`M26 ${58 - k * 6} C 30 ${42 - k * 6} 56 ${48 - k * 2} 78 ${66 + k * 4} L 76 80 C 60 74 36 76 30 74 Z`} fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <path d="M40 50 q 4 4 0 9 M48 50 q 4 4 0 9" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+          <rect x="30" y="66" width="7" height="20" rx="3.4" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+          <rect x="39" y="66" width="7" height="20" rx="3.4" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+          <Limb d={`M74 80 L ${96 + k * 6} 84`} w={6.5} />
+          <Paw x={98 + k * 6} y={86} />
+          <Face x={88} y={64 + k * 6} rot={8} eyes={k > 0.4 ? 'closed' : 'half'} mouth={k > 0.6 ? 'open' : 'smile'} open={k > 0.6 ? 0.45 : 0} blink={blink} />
         </g>
       );
     }
     case 'petted': {
-      const lean = Math.sin(t * 2.4) * 4;
-      return (<><SitBody t={t} tail={1.6} /><FrontLegs /><Head x={65} y={33} rot={-8 + lean} eyes={<Eyes happy />} /></>);
+      const lean = still ? 0 : Math.sin(t * 2.4) * 5;
+      const quiver = still ? 0 : Math.sin(t * 30) * 0.6;
+      return (<><SitBody t={t} tail={0.3 + quiver} /><FrontLegs /><Face x={65} y={33} rot={-10 + lean} eyes="happy" /></>);
     }
     case 'look':
-      return (<><SitBody t={t} tail={1.2} /><FrontLegs /><Head x={65} y={32} rot={-24} eyes={<Eyes blinking={blinking} />} /></>);
+      return (<><SitBody t={t} tail={1.2} /><FrontLegs /><Face x={65} y={32} rot={-14} eyes="wide" look={look} blink={blink} /></>);
+    case 'crouch': {
+      // Rear up and wiggling, eyes locked on the butterfly.
+      const wig = still ? 0 : Math.sin(t * 14) * 1.6;
+      return (
+        <g>
+          <Limb d={`M32 ${60 + wig} C 18 ${56 + wig} 12 ${46 - wig} ${16 + wig * 2} 38`} w={6.5} />
+          <path d={`M28 84 C 22 ${70 + wig} 26 ${56 + wig} 40 ${55 + wig} C 56 56 70 64 82 71 C 89 76 87 84 80 84 Z`} fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <path d="M40 59 q 4 4 0 8 M48 60 q 4 4 0 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+          <Paw x={78} y={85} /><Paw x={88} y={85} />
+          <Face x={88} y={62} eyes="wide" look={look} mouth="none" />
+        </g>
+      );
+    }
+    case 'pounce': {
+      const k = Math.sin(Math.min(1, age / 0.7) * Math.PI);
+      return (
+        <g transform={`translate(0 ${-k * 26})`}>
+          <Limb d="M30 58 C 18 60 10 56 4 60" w={7} />
+          <ellipse cx="52" cy="58" rx="28" ry="12" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <path d="M42 48 q 4 4 0 8 M50 47 q 4 4 0 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+          <Limb d="M70 60 L 90 54" w={6} />
+          <Limb d="M70 64 L 92 62" w={6} />
+          <Limb d="M34 64 L 18 72" w={6} />
+          <Face x={84} y={44} eyes="wide" look={[1, -1]} mouth="open" open={0.35} />
+        </g>
+      );
+    }
+    case 'roll': {
+      const kick = still ? 0 : Math.sin(t * 5);
+      return (
+        <>
+          <Limb d="M28 82 C 16 84 12 76 18 70" w={6.5} />
+          <ellipse cx="56" cy="76" rx="29" ry="11.5" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <ellipse cx="56" cy="72" rx="19" ry="6.5" fill={F.cream} />
+          <Limb d={`M42 68 L ${38 + kick * 2} 56`} w={6} />
+          <Limb d={`M50 67 L ${50 - kick * 2} 55`} w={6} />
+          <Limb d={`M62 67 L ${64 + kick * 2} 55`} w={6} />
+          <Limb d={`M70 68 L ${74 - kick * 2} 57`} w={6} />
+          <Face x={89} y={63} rot={160} eyes="happy" />
+        </>
+      );
+    }
+    case 'sit':
+      return (<><SitBody t={t} /><FrontLegs /><Face x={65} y={33} rot={Math.sin(t * 0.4) * 4} eyes="open" look={look} blink={blink} earTwitch={twitch} /></>);
+    case 'loaf':
     default:
-      return (<><SitBody t={t} /><FrontLegs /><Head x={65} y={33} rot={Math.sin(t * 0.4) * 4} eyes={<Eyes blinking={blinking} />} /></>);
+      return (<><LoafBody t={t} /><Paw x={74} y={85} /><Paw x={84} y={85} /><Face x={80} y={46} rot={Math.sin(t * 0.3) * 3} eyes={blink > 0.5 ? 'closed' : 'open'} look={look} blink={blink} earTwitch={twitch} /></>);
   }
 }

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { ASK_FIRST, DISCLAIMER } from '../../data/safety';
 import { settings, updateSettings } from '../../data/settings';
 import * as engine from '../../audio/engine';
-import { Icon, Steps } from '../components';
-import { VolumeCard } from '../Player';
+import { Icon, Slider, Steps } from '../components';
 
 type Step = 'safety' | 'lr' | 'mono' | 'level' | 'done';
 export function Onboarding({ onDone, recheck }: { onDone: () => void; recheck?: boolean }) {
@@ -194,16 +193,15 @@ function Level({ onNext }: { onNext: () => void }) {
   return (
     <>
       <h1>A comfortable level</h1>
-      <p class="lead">Press play to hear a little of the music Steady plays. Set your <b>phone volume</b> so it's soft but clear, like music in the next room.</p>
+      <p class="lead">Press play, then set your phone so this feels <b>soft but clear</b>, like music in the next room.</p>
       <div class="card center">
         <button class="play-btn" style="margin:6px auto 10px" onClick={toggle} disabled={loading} aria-label={playing ? 'Stop' : 'Play'}>
           <Icon name={playing ? 'stop' : 'play'} />
         </button>
-        <p class="small muted" style="margin:0">{loading ? 'Loading the piano…' : 'Satie, Gymnopédie No. 1'}</p>
+        <p class="small muted" style="margin:0 0 6px">{loading ? 'Loading the piano…' : 'Satie, Gymnopédie No. 1'}</p>
+        <Slider label="Steady's volume" value={Math.round(volume * 100)} min={5} max={100} step={1} format={(v) => `${v}%`} onInput={(v) => updateSettings({ volume: v / 100 })} />
       </div>
-      <VolumeCard />
-      <p class="tiny faint">Tip: your phone has a built-in loudness limiter (iPhone: Headphone Safety → Reduce Loud Audio). See Settings.</p>
-      <button class="btn primary block" onClick={onNext}>Start</button>
+      <button class="btn primary block" onClick={() => { if (playing) void engine.stopSession(3); onNext(); }}>Choose how I want to feel</button>
     </>
   );
 }

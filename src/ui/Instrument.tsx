@@ -340,3 +340,125 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
   }
   c.globalAlpha = 1;
 }
+
+/**
+ * A slim "music box" under a painting: a few octaves of keys (or four strings)
+ * that light up with the notes. No falling notes and no breath cue; the
+ * painting carries the breath. Tap it to open the full piano or strings view.
+ */
+export function MusicStrip({ kind, timeline, playing, onOpen }: {
+  kind: 'piano' | 'strings';
+  timeline: Timeline | null;
+  playing: boolean;
+  onOpen?: () => void;
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = canvas.current;
+    const c = cv?.getContext('2d');
+    if (!cv || !c) return;
+    const reduce = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const accent = cssVar(cv, '--accent', '#e2a75e');
+    const notes = timeline?.notes ?? [];
+    const len = timeline?.length ?? 1;
+    // About three octaves centred on where the music sits.
+    let mid = 66;
+    if (notes.length) {
+      const ms = notes.map((n) => n.midi).sort((a, b) => a - b);
+      mid = ms[Math.floor(ms.length / 2)];
+    }
+    const lo = Math.max(21, mid - 18 - ((mid - 18) % 12));
+    const hi = Math.min(108, lo + 35);
+    const whites: number[] = [];
+    for (let m = lo; m <= hi; m++) if (!isBlack(m)) whites.push(m);
+    const glow = new Map<number, number>();
+    let raf = 0;
+    let last = performance.now();
+    const t0 = last;
+    const frame = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const W = cv.clientWidth, H = cv.clientHeight;
+      if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.clearRect(0, 0, W, H);
+      const down = new Map<number, number>();
+      if (playing && notes.length) {
+        const mt = engine.musicTime() % len;
+        for (let i = firstVisible(notes, mt); i < notes.length; i++) {
+          const n = notes[i];
+          if (n.t > mt) break;
+          if (n.t + n.dur >= mt) down.set(n.midi, Math.max(down.get(n.midi) ?? 0, n.vel));
+        }
+      }
+      for (const m of new Set([...glow.keys(), ...down.keys()])) {
+        const target = down.get(m) ?? 0;
+        const g = glow.get(m) ?? 0;
+        const k = target > g ? 1 - Math.exp(-dt / 0.08) : 1 - Math.exp(-dt / 0.45);
+        glow.set(m, g + (target - g) * k);
+      }
+      if (kind === 'piano') {
+        // Fold notes outside the range into the nearest octave so nothing is lost.
+        const folded = new Map<number, number>();
+        for (const [m, g] of glow) {
+          let f = m;
+          while (f < lo) f += 12;
+          while (f > hi) f -= 12;
+          folded.set(f, Math.max(folded.get(f) ?? 0, g));
+        }
+        const ww = W / whites.length, kh = H - 8;
+        for (const m of whites) {
+          const x = whites.indexOf(m) * ww;
+          const g = folded.get(m) ?? 0;
+          c.fillStyle = '#efe6d8';
+          roundRect(c, x + 0.6, 4, ww - 1.2, kh, 3);
+          c.fill();
+          if (g > 0.01) { c.globalAlpha = 0.8 * g; c.fillStyle = accent; c.fill(); c.globalAlpha = 1; }
+        }
+        for (let m = lo; m <= hi; m++) {
+          if (!isBlack(m)) continue;
+          const x = (whites.indexOf(m - 1) + 1) * ww - ww * 0.3;
+          const g = folded.get(m) ?? 0;
+          c.fillStyle = '#2a241f';
+          roundRect(c, x, 4, ww * 0.6, kh * 0.6, 2);
+          c.fill();
+          if (g > 0.01) { c.globalAlpha = 0.9 * g; c.fillStyle = accent; c.fill(); c.globalAlpha = 1; }
+        }
+        const shade = c.createLinearGradient(0, 4, 0, 12);
+        shade.addColorStop(0, 'rgba(20,16,12,0.5)');
+        shade.addColorStop(1, 'rgba(20,16,12,0)');
+        c.fillStyle = shade;
+        c.fillRect(0, 4, W, 8);
+      } else {
+        const ranges: [number, number][] = [[64, 108], [57, 63], [48, 56], [21, 47]];
+        const time = (now - t0) / 1000;
+        for (let i = 0; i < 4; i++) {
+          let a = 0;
+          for (const [m, g] of glow) if (m >= ranges[i][0] && m <= ranges[i][1]) a = Math.max(a, g);
+          const y = 9 + i * ((H - 18) / 3);
+          const amp = reduce ? 0 : (1 + 2.5 * (3 - i) / 3) * a;
+          c.strokeStyle = a > 0.05 ? accent : '#d9c7a6';
+          c.globalAlpha = 0.45 + 0.5 * a;
+          c.lineWidth = 0.8 + i * 0.35;
+          c.beginPath();
+          for (let x = 0; x <= W; x += 4) {
+            const u = x / W;
+            const yy = y + amp * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * (1.5 + i * 0.3) * time + u * 3);
+            if (x === 0) c.moveTo(x, yy); else c.lineTo(x, yy);
+          }
+          c.stroke();
+          c.globalAlpha = 1;
+        }
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [timeline, playing, kind]);
+  return (
+    <button class={`music-strip ${kind}`} onClick={onOpen} aria-label={kind === 'piano' ? 'Show the full piano' : 'Show the strings'}>
+      <canvas ref={canvas} aria-hidden="true" />
+    </button>
+  );
+}

@@ -4,7 +4,7 @@ import { settings, isCustom, recipeFor } from '../../data/settings';
 import { HelpButton, Icon, helpOpen } from '../components';
 import { go } from '../router';
 import { allSessions, nudges, type Nudge } from '../../data/usage';
-import { shortTitle } from '../Player';
+import { autoplay, shortTitle } from '../Player';
 import { SceneThumb } from '../Scene';
 
 function greeting(): string {
@@ -41,6 +41,16 @@ export function Home() {
         </div>
       ))}
 
+      {last && (
+        <button class={`resume accent-${last.accent}`} onClick={() => { autoplay.mood = last.id; go(`/m/${last.id}`); }}>
+          <span class="dot"><Icon name="play" /></span>
+          <span>
+            <div class="eyebrow">Play again</div>
+            <div style="font-weight:650">{last.name} · {shortTitle(recipeFor(last.id).sound)} · {recipeFor(last.id).minutes} min</div>
+          </span>
+        </button>
+      )}
+
       <div class="mood-grid">
         {MOODS.map((m) => (
           <button class={`mood accent-${m.accent}`} onClick={() => go(`/m/${m.id}`)}>
@@ -54,16 +64,6 @@ export function Home() {
           </button>
         ))}
       </div>
-
-      {last && (
-        <button class={`resume accent-${last.accent}`} onClick={() => go(`/m/${last.id}`)}>
-          <span class="dot"><Icon name="play" /></span>
-          <span>
-            <div class="eyebrow">Pick up where you left off</div>
-            <div style="font-weight:650">{last.name} · {shortTitle(recipeFor(last.id).sound)}</div>
-          </span>
-        </button>
-      )}
 
       <div class="quick-row">
         <button onClick={() => go('/move')}><Icon name="walk" />Move</button>

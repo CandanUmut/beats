@@ -22,7 +22,8 @@ export interface Settings {
   autoBeats: boolean;
   beatMode: 'binaural' | 'pulse';
   /** Show the instrument animation or the breathing circle. */
-  visual: 'instrument' | 'circle';
+  /** Show the piano keys or strings in a slim strip under the painting. */
+  musicStrip: boolean;
   /** The user's own version of each mood (from Fine-tune or the taste test). */
   recipes: Partial<Record<MoodId, Recipe>>;
   lastMood: MoodId | null;
@@ -47,7 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastSound: {},
   autoBeats: true,
   beatMode: 'binaural',
-  visual: 'instrument',
+  musicStrip: true,
   recipes: {},
   lastMood: null,
   hpPrompts: 0,
