@@ -7,9 +7,11 @@ import { DEFAULT_PARAMS, type MixParams, type SessionTiming } from '../audio/dsp
 import { settings, updateSettings, recipeFor, saveRecipe, resetRecipe, isCustom, resolveBeatType } from '../data/settings';
 import { recordSession } from '../data/usage';
 import { db } from '../data/db';
-import { BEAT_FEELS, MOOD_BY_ID, STRENGTH, feelName, type MoodId, type Recipe } from '../data/moods';
+import { BEAT_FEELS, MINUTE_OPTIONS, MOOD_BY_ID, STRENGTH, feelName, type MoodId, type Recipe, type Visual } from '../data/moods';
 import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
 import { InstrumentView, type Timeline } from './Instrument';
+import { SceneView, SceneThumb } from './Scene';
+import { SCENES, type SceneId } from './scenes';
 import { Icon, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
 import { go } from './router';
 import { LeftRight, Mono } from './screens/Onboarding';
@@ -136,7 +138,7 @@ export async function loadForPlay(id: string, onBusy?: (s: string | null) => voi
   }
 }
 
-type Section = 'music' | 'breathing' | 'beat' | 'length';
+type Section = 'music' | 'look' | 'breathing' | 'beat' | 'length';
 
 export function Player(p: PlayerProps) {
   const mood = MOOD_BY_ID[p.moodId];
@@ -166,8 +168,12 @@ export function Player(p: PlayerProps) {
   const status = engine.status.value;
   const playing = running && (status === 'playing' || status === 'stopping');
   const item = SOUND_BY_ID[sound];
-  const instrument = item && item.visual !== 'orb' ? item.visual : null;
-  const showInstrument = !!instrument && s.visual === 'instrument';
+  // What the stage shows: a scene, the piano or strings (needs notes), or the lamp.
+  const notes = hasNotes(sound);
+  const wanted: Visual = recipe.visual ?? 'scene';
+  const view: Visual = (wanted === 'piano' || wanted === 'strings') && !notes ? 'scene' : wanted;
+  const sceneId: SceneId = recipe.scene ?? 'forest';
+  const breathWord = SCENES.find((x) => x.id === sceneId)?.breath ?? 'the light';
 
   function setRecipe(r: Recipe) {
     setRecipeState(r);
@@ -301,28 +307,32 @@ export function Player(p: PlayerProps) {
   return (
     <div>
       <div class="stage">
-        {showInstrument ? (
+        {view === 'piano' || view === 'strings' ? (
           <InstrumentView
-            kind={instrument!}
+            kind={view}
             timeline={timeline}
             playing={playing}
             breathing={recipe.breathing}
             pattern={pattern}
             showPill={false}
             hint={recipe.breathing ? 'Press play, then <b>breathe with the light</b>: in as it rises, out as it falls.' : 'Press play. The keys follow the music.'}
-            onSwitch={() => updateSettings({ visual: 'circle' })}
+            onSwitch={() => setTune('look')}
             onPart={(title, composer) => { const d = displayForPart(title); setNowPlaying(d ? { title: d.title, composer: d.sub } : { title, composer }); }}
           />
+        ) : view === 'scene' ? (
+          <SceneView scene={sceneId} playing={playing} breathing={recipe.breathing} pattern={pattern} hint={recipe.breathing ? `Press play, then <b>breathe with ${breathWord}</b>: in as it rises, out as it falls.` : null}>
+            <button class="view-pill" onClick={() => setTune('look')}>Change view</button>
+          </SceneView>
         ) : (
           <div class="lamp-wrap">
             <Orb pattern={pattern} active={recipe.breathing} playing={playing} label={playing ? 'Just listen' : 'Press play'} />
-            {instrument && <button class="view-pill" onClick={() => updateSettings({ visual: 'instrument' })}>{instrument === 'piano' ? 'Piano' : 'Strings'}</button>}
+            <button class="view-pill" onClick={() => setTune('look')}>Change view</button>
           </div>
         )}
-        {!showInstrument && recipe.breathing && !playing && (
+        {view === 'lamp' && recipe.breathing && !playing && (
           <p class="tiny muted center" style="margin:2px 0 0">then breathe with the light</p>
         )}
-        {showInstrument && recipe.breathing && playing && <BreathCue pattern={pattern} playing={playing} />}
+        {view !== 'lamp' && recipe.breathing && playing && <BreathCue pattern={pattern} playing={playing} />}
         <div class="now-playing">
           {sound !== 'none' && (
             <>
@@ -508,6 +518,24 @@ function TuneSheet(o: {
         </div>
       </div>
 
+      <div class="sheet-section" id="tune-look">
+        <h3><Icon name="leaf" />View</h3>
+        <div class="scene-grid">
+          {SCENES.map((sc) => (
+            <button class={`scene-opt ${r.visual === 'scene' && r.scene === sc.id ? 'on' : ''}`} onClick={() => set({ visual: 'scene', scene: sc.id })}>
+              <SceneThumb scene={sc.id} />
+              <span>{sc.name}</span>
+            </button>
+          ))}
+        </div>
+        <div class="chips" style="margin-top:8px">
+          <button class={`chip ${r.visual === 'piano' ? 'on' : ''}`} disabled={!hasNotes(r.sound)} onClick={() => set({ visual: 'piano' })}>Piano keys</button>
+          <button class={`chip ${r.visual === 'strings' ? 'on' : ''}`} disabled={!hasNotes(r.sound)} onClick={() => set({ visual: 'strings' })}>Strings</button>
+          <button class={`chip ${r.visual === 'lamp' ? 'on' : ''}`} onClick={() => set({ visual: 'lamp' })}>Lamp</button>
+        </div>
+        {!hasNotes(r.sound) && <p class="explain">Piano keys and strings follow the notes, so they need music with notes (not rain, noise or your own file).</p>}
+      </div>
+
       <div class="sheet-section" id="tune-breathing">
         <h3><Icon name="lungs" />Breathing</h3>
         <Toggle label="Breathing guide" hint="A visual cue, and the music gently rises and falls with it" checked={r.breathing} onChange={(breathing) => set({ breathing })} />
@@ -533,40 +561,48 @@ function TuneSheet(o: {
       </div>
 
       <div class="sheet-section" id="tune-beat">
-        <h3 class="group-head" style="justify-content:space-between"><span style="display:flex;gap:8px;align-items:center"><Icon name="wave" />Beat</span><a class="tiny" style="color:var(--faint);font-family:var(--sans);font-weight:600" href="#/evidence/beats-entrainment">Why?</a></h3>
-        <p class="explain">A soft, steady rhythm under the music. Pick a feel and see what suits you.</p>
+        <h3 class="group-head" style="justify-content:space-between"><span style="display:flex;gap:8px;align-items:center"><Icon name="wave" />Beat</span><a class="tiny" style="color:var(--faint);font-family:var(--sans);font-weight:600" href="#/evidence/beats-entrainment">The research</a></h3>
+        <p class="explain">A soft, steady pulse woven under the music. With headphones, each ear gets a slightly different tone and you hear a slow "wobble" between them (a binaural beat). On a speaker, the music itself gently pulses. It's subtle on purpose: something you feel more than hear.</p>
         <Toggle label="Beat" checked={r.beat.on} onChange={(on) => set({ beat: { ...r.beat, on } })} />
         {r.beat.on && (
           <>
             <div class="field">
-              <div class="field-head"><span>Feel</span><span class="v">{BEAT_FEELS.find((f) => f.rate === r.beat.rate)?.hint ?? ''}</span></div>
-              <Seg value={r.beat.rate} label="Beat feel" onChange={(rate) => set({ beat: { ...r.beat, rate } })} options={BEAT_FEELS.map((f) => ({ v: f.rate, label: f.name }))} />
+              <div class="field-head"><span>Pace</span></div>
+              <div class="feel-list">
+                {BEAT_FEELS.map((f) => (
+                  <button class={`feel-opt ${r.beat.rate === f.rate ? 'on' : ''}`} onClick={() => set({ beat: { ...r.beat, rate: f.rate } })}>
+                    <span class="radio" />
+                    <span><b>{f.name}</b> <span class="muted">· {f.hint}</span><div class="tiny muted">{f.about}</div></span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <details class="more">
-              <summary>More beat options</summary>
-              <div class="field">
-                <div class="field-head"><span>Strength</span></div>
-                <Seg value={r.beat.strength} label="Beat strength" onChange={(strength) => set({ beat: { ...r.beat, strength } })} options={(['subtle', 'medium', 'strong'] as const).map((k) => ({ v: k, label: STRENGTH[k].label }))} />
-              </div>
-              <div class="field">
-                <div class="field-head"><span>Listening on</span></div>
-                <Seg value={r.beat.type} label="Beat type" onChange={(type) => set({ beat: { ...r.beat, type } })} options={[{ v: 'auto', label: 'Auto' }, { v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speaker' }]} />
-                <p class="explain" style="margin-top:6px">
-                  {r.beat.type === 'binaural'
-                    ? `Headphones: each ear gets a slightly different tone and your brain hears the beat between them. Needs both earbuds in.${mono ? ' Your stereo check said mono, so Speaker will work better.' : ''}`
-                    : r.beat.type === 'pulse'
-                      ? 'Speaker: the music itself gently pulses. Works anywhere, even on one earbud.'
-                      : `Auto: uses headphones if you've confirmed them in the headphone check, otherwise a gentle pulse that works on any speaker. Right now: ${resolveBeatType('auto') === 'binaural' ? 'headphones' : 'speaker'}.`}
-                </p>
-              </div>
-            </details>
+            {!o.running && (
+              <button class="btn small block" onClick={() => void demoBeat(r.beat.rate, r.beat.type, r.beat.strength)}><Icon name="headphones" /> Hear this beat on its own (10 s)</button>
+            )}
+            <div class="field">
+              <div class="field-head"><span>Listening on</span></div>
+              <Seg value={r.beat.type} label="Beat type" onChange={(type) => set({ beat: { ...r.beat, type } })} options={[{ v: 'auto', label: 'Auto' }, { v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speaker' }]} />
+              <p class="explain" style="margin-top:6px">
+                {r.beat.type === 'binaural'
+                  ? `Headphones: needs both earbuds in.${mono ? ' Your stereo check said mono, so Speaker will work better.' : ''}`
+                  : r.beat.type === 'pulse'
+                    ? 'Speaker: the music gently pulses. Works anywhere, even on one earbud.'
+                    : `Auto: headphone beat if you've done the headphone check, otherwise the speaker pulse. Right now: ${resolveBeatType('auto') === 'binaural' ? 'headphones' : 'speaker'}.`}
+              </p>
+            </div>
+            <div class="field">
+              <div class="field-head"><span>Strength</span></div>
+              <Seg value={r.beat.strength} label="Beat strength" onChange={(strength) => set({ beat: { ...r.beat, strength } })} options={(['subtle', 'medium', 'strong'] as const).map((k) => ({ v: k, label: STRENGTH[k].label }))} />
+            </div>
           </>
         )}
       </div>
 
       <div class="sheet-section" id="tune-length">
         <h3><Icon name="clock" />Length</h3>
-        <div class="chips">{[...new Set([...mood.minuteOptions, r.minutes])].sort((a, b) => a - b).map((m) => <button class={`chip ${r.minutes === m ? 'on' : ''}`} onClick={() => set({ minutes: m })}>{m} min</button>)}</div>
+        <div class="minute-grid">{MINUTE_OPTIONS.map((m) => <button class={`chip ${r.minutes === m ? 'on' : ''}`} onClick={() => set({ minutes: m })}>{m}</button>)}</div>
+        <p class="explain" style="margin-top:6px">Minutes. {mood.name} usually works well at {mood.minuteOptions.join(', ')}.</p>
         {o.running && <p class="explain">A new length applies next time you press play.</p>}
       </div>
 
@@ -685,4 +721,33 @@ function ExportSheet({ onClose, maxMinutes, make }: { onClose: () => void; maxMi
 function HeadphoneCheck({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<'lr' | 'mono'>('lr');
   return step === 'lr' ? <LeftRight onNext={() => setStep('mono')} /> : <Mono onNext={onDone} />;
+}
+
+/** Piano/strings animations need note data; noise and drones have none. */
+export function hasNotes(id: string): boolean {
+  if (id === 'upload' || id === 'none') return false;
+  return !!SOUND_BY_ID[id] && !['rain', 'pink', 'brown', 'hush'].includes(id);
+}
+
+/** Play the beat on its own for a few seconds so people can hear what it is. */
+export async function demoBeat(rate: number, type: 'auto' | 'binaural' | 'pulse', strength: Recipe['beat']['strength']): Promise<void> {
+  await engine.ensureAudio();
+  if (engine.status.value !== 'idle') await engine.stopSession(0.3);
+  const mode = resolveBeatType(type);
+  // A pulse needs something to pulse, so it plays on a soft drone.
+  const music = mode === 'pulse' ? (await engine.loadSound('hush')).key : null;
+  await engine.startSession({
+    music,
+    noise: null,
+    params: {
+      ...DEFAULT_PARAMS,
+      musicGainDb: mode === 'pulse' ? -4 : -80,
+      noiseGainDb: -80,
+      breath: { enabled: false, pattern: patternFor({ mode: 'paced', bpm: 6, ratio: 1 }), depthDb: 0 },
+      rhythm: { mode, rate, depth: Math.max(0.25, STRENGTH[strength].depth), carrier: 200, levelDb: -12 },
+      volume: settings.value.volume,
+    },
+    timing: { duration: 10, fadeIn: 0.8, fadeOut: 1.5 },
+    title: 'Beat preview',
+  });
 }

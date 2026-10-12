@@ -32,7 +32,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
-  volume: 0.6,
+  volume: 0.45,
   breath: DEFAULT_BREATH,
   swellDb: 4,
   vibrate: false,

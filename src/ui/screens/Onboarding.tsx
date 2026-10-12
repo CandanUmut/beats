@@ -158,6 +158,7 @@ export function Mono({ onNext }: { onNext: () => void }) {
 
 function Level({ onNext }: { onNext: () => void }) {
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
   const volume = settings.value.volume;
   const params = {
     musicGainDb: 0,
@@ -176,12 +177,15 @@ function Level({ onNext }: { onNext: () => void }) {
       return;
     }
     await engine.ensureAudio();
-    const key = await engine.loadTrack('pink');
+    setLoading(true);
+    // A few bars of real music (Satie, on the piano), faded in gently.
+    const key = (await engine.loadSound('piece:satie-gym-1')).key;
+    setLoading(false);
     await engine.startSession({
       music: key,
       noise: null,
       params,
-      timing: { duration: 120, fadeIn: 1, fadeOut: 1 },
+      timing: { duration: 90, fadeIn: 4, fadeOut: 3 },
       title: 'Level check',
       onEnded: () => setPlaying(false),
     });
@@ -190,12 +194,12 @@ function Level({ onNext }: { onNext: () => void }) {
   return (
     <>
       <h1>A comfortable level</h1>
-      <p class="lead">Play the reference sound. It's as loud as the app's music will be. Set your <b>device volume</b> so it's soft but clear.</p>
+      <p class="lead">Press play to hear a little of the music Steady plays. Set your <b>phone volume</b> so it's soft but clear, like music in the next room.</p>
       <div class="card center">
-        <button class="play-btn" style="margin:6px auto 10px" onClick={toggle} aria-label={playing ? 'Stop' : 'Play reference'}>
+        <button class="play-btn" style="margin:6px auto 10px" onClick={toggle} disabled={loading} aria-label={playing ? 'Stop' : 'Play'}>
           <Icon name={playing ? 'stop' : 'play'} />
         </button>
-        <p class="small muted" style="margin:0">Soft noise, like distant rain</p>
+        <p class="small muted" style="margin:0">{loading ? 'Loading the piano…' : 'Satie, Gymnopédie No. 1'}</p>
       </div>
       <VolumeCard />
       <p class="tiny faint">Tip: your phone has a built-in loudness limiter (iPhone: Headphone Safety → Reduce Loud Audio). See Settings.</p>

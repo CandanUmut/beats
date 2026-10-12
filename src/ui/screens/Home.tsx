@@ -5,6 +5,7 @@ import { HelpButton, Icon, MoodGlyph, helpOpen } from '../components';
 import { go } from '../router';
 import { allSessions, nudges, type Nudge } from '../../data/usage';
 import { shortTitle } from '../Player';
+import { SceneThumb } from '../Scene';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -43,6 +44,7 @@ export function Home() {
       <div class="mood-grid">
         {MOODS.map((m) => (
           <button class={`mood accent-${m.accent}`} onClick={() => go(`/m/${m.id}`)}>
+            <SceneThumb scene={recipeFor(m.id).scene ?? 'forest'} />
             {isCustom(m.id) && <span class="mine">Yours</span>}
             <MoodGlyph id={m.id} />
             <div>

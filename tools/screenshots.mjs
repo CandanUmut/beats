@@ -86,17 +86,28 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await shot('27-strings-playing', false);
   await page.click('button[aria-label=Stop]');
   await page.waitForTimeout(2500);
-  // Taste test.
+  // Find my sound.
   await page.goto(base + '#/tune/relaxed');
   await page.waitForSelector('h1');
-  await shot('28-taste-intro');
-  await page.click('text=Start listening');
-  await page.waitForSelector('.taste-opt', { timeout: 90000 });
-  await page.waitForTimeout(5000);
-  await shot('29-taste-music', false);
-  await page.click('.taste-opt.playing .pick');
-  await page.waitForTimeout(3000);
-  await shot('30-taste-beat', false);
+  await shot('28-find-music');
+  await page.click('.taste-opt .letter');
+  await page.waitForTimeout(6000);
+  await shot('29-find-music-preview', false);
+  await page.click('text=Next: the beat');
+  await page.waitForTimeout(800);
+  await shot('30-find-beat');
+  await page.click('text=Keep the beat');
+  await shot('31-find-length');
+  await page.click('text=Next: the view');
+  await page.waitForTimeout(800);
+  await shot('32-find-view');
+  // Each scene, playing.
+  for (const m of ['calm', 'sleepy', 'grounded', 'focused', 'brighter']) {
+    await page.goto(base + '#/m/' + m);
+    await page.waitForSelector('button[aria-label=Start]');
+    await page.waitForTimeout(1200);
+    await shot('40-scene-' + m, false);
+  }
   await ctx.close();
 }
 await browser.close();
