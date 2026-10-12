@@ -29,6 +29,13 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await page.click('text=Start');
   await page.waitForSelector('.mood');
   await shot('05-home');
+  await page.waitForTimeout(5000);
+  await shot('05b-home-cat', false);
+  await page.click('.cat');
+  await page.waitForTimeout(500);
+  await page.click('.cat');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${out}/${label}-05c-cat-petted.png`, clip: { x: 0, y: viewport.height - 160, width: viewport.width, height: 160 } });
   const routes = [
     ['06-calm', '#/m/calm'], ['07-grounded', '#/m/grounded'], ['08-sleepy', '#/m/sleepy'], ['09-focused', '#/m/focused'],
     ['10-brighter', '#/m/brighter'], ['10b-relaxed', '#/m/relaxed'], ['11-move', '#/move'], ['12-evidence', '#/evidence'], ['13-why-beats-anger', '#/evidence/beats-anger'],

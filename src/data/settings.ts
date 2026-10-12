@@ -28,6 +28,9 @@ export interface Settings {
   lastMood: MoodId | null;
   /** How many times the "using headphones?" card has been shown. */
   hpPrompts: number;
+  /** The cat companion, and whether he makes sounds. */
+  cat: boolean;
+  catSounds: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,6 +49,8 @@ export const DEFAULT_SETTINGS: Settings = {
   recipes: {},
   lastMood: null,
   hpPrompts: 0,
+  cat: true,
+  catSounds: true,
 };
 
 export const settings = signal<Settings>(DEFAULT_SETTINGS);

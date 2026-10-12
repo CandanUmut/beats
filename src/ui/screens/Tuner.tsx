@@ -5,9 +5,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import * as engine from '../../audio/engine';
 import { MOOD_BY_ID, BEAT_FEELS, MINUTE_OPTIONS, feelName, type MoodId, type Recipe } from '../../data/moods';
-import { settings, recipeFor, saveRecipe } from '../../data/settings';
+import { settings, recipeFor, saveRecipe, resolveBeatType } from '../../data/settings';
 import { CATEGORIES, SOUNDS, displayName } from '../../music/catalog';
-import { Icon, MoodGlyph, Steps, TopBar } from '../components';
+import { Icon, MoodGlyph, Seg, Steps, TopBar } from '../components';
 import { demoBeat, hasNotes, loadForPlay, recipeParams } from '../Player';
 import { SceneThumb } from '../Scene';
 import { SCENES } from '../scenes';
@@ -98,13 +98,23 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
 
       {stage === 'beat' && (
         <>
-          <div class="session-head"><div class="eyebrow">Step 2 · The beat</div><h1>What's the beat?</h1></div>
-          <div class="card">
-            <p class="small" style="margin-top:0">A soft, steady pulse woven under your music. With <b>headphones</b>, each ear gets a slightly different tone, and you hear a slow wobble that seems to move between your ears. That's a binaural beat. On a <b>speaker</b>, the music itself gently pulses instead.</p>
-            <p class="small muted" style="margin-bottom:0">It's meant to be subtle, something you feel more than hear. Listen to it on its own first, then with your music.</p>
-          </div>
+          <div class="session-head"><div class="eyebrow">Step 2 · The beat</div><h1>Add a beat?</h1></div>
+          <p class="small" style="margin-top:0">A soft pulse under your music, more felt than heard. With headphones, each ear gets a slightly different tone and you hear a slow wobble between your ears. On a speaker, the music gently pulses.</p>
           <div class="field">
-            <div class="field-head"><span>Pace</span></div>
+            <div class="field-head"><span>Listening on</span></div>
+            <Seg value={resolveBeatType(r.beat.type)} label="Listening on" onChange={(type) => setR({ ...r, beat: { ...r.beat, type } })} options={[{ v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speaker' }]} />
+          </div>
+          <div class="btn-row">
+            <button class="btn small" onClick={() => { setPreviewing(null); void demoBeat(r.beat.rate, r.beat.type === 'auto' ? resolveBeatType('auto') : r.beat.type, 'strong'); }}><Icon name="headphones" /> Hear it on its own</button>
+            <button class="btn small" onClick={() => void preview(r.sound, { ...r, beat: { ...r.beat, on: true } })}><Icon name="note" /> With my music</button>
+          </div>
+          <p class="tiny muted" style="margin-top:-4px">You'll hear the {resolveBeatType(r.beat.type) === 'binaural' ? 'headphone' : 'speaker'} version.</p>
+          <div class="btn-row">
+            <button class={`btn ${r.beat.on ? 'primary' : ''}`} onClick={() => { setR({ ...r, beat: { ...r.beat, on: true } }); next(); }}>Keep the beat</button>
+            <button class={`btn ${!r.beat.on ? 'primary' : ''}`} onClick={() => { setR({ ...r, beat: { ...r.beat, on: false } }); next(); }}>No beat</button>
+          </div>
+          <details class="more">
+            <summary>Pace: {feelName(r.beat.rate)} · {BEAT_FEELS.find((f) => f.rate === r.beat.rate)?.hint} · Change</summary>
             <div class="feel-list">
               {BEAT_FEELS.map((f) => (
                 <button class={`feel-opt ${r.beat.rate === f.rate ? 'on' : ''}`} onClick={() => setR({ ...r, beat: { ...r.beat, rate: f.rate, on: true } })}>
@@ -113,16 +123,8 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
                 </button>
               ))}
             </div>
-          </div>
-          <div class="btn-row">
-            <button class="btn small" onClick={() => { setPreviewing(null); void demoBeat(r.beat.rate, r.beat.type, 'strong'); }}><Icon name="headphones" /> On its own</button>
-            <button class="btn small" onClick={() => void preview(r.sound, { ...r, beat: { ...r.beat, on: true } })}><Icon name="note" /> With my music</button>
-          </div>
-          <p class="tiny faint">Headphones give the full effect. Without them you'll hear the speaker version.</p>
-          <div class="btn-row">
-            <button class={`btn ${r.beat.on ? 'primary' : ''}`} onClick={() => { setR({ ...r, beat: { ...r.beat, on: true } }); next(); }}>Keep the beat</button>
-            <button class={`btn ${!r.beat.on ? 'primary' : ''}`} onClick={() => { setR({ ...r, beat: { ...r.beat, on: false } }); next(); }}>No beat</button>
-          </div>
+            <p class="tiny faint">The paces sound alike; the suggested one for {mood.name.toLowerCase()} comes from the studies.</p>
+          </details>
         </>
       )}
 
@@ -141,13 +143,14 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
           <p class="muted small">Each scene moves with your breath: the tide comes in, the mist rises, the sun lifts.</p>
           <div class="scene-grid big">
             {SCENES.map((sc) => (
-              <button class={`scene-opt ${r.visual === 'scene' && r.scene === sc.id ? 'on' : ''}`} onClick={() => setR({ ...r, visual: 'scene', scene: sc.id })}>
+              <button class={`scene-opt ${(r.visual === 'scene' || (r.visual ?? 'auto') === 'auto') && r.scene === sc.id ? 'on' : ''}`} onClick={() => setR({ ...r, visual: r.visual === 'auto' || !r.visual ? 'auto' : 'scene', scene: sc.id })}>
                 <SceneThumb scene={sc.id} />
                 <span>{sc.name}</span>
               </button>
             ))}
           </div>
           <div class="chips" style="margin-top:10px">
+            <button class={`chip ${(r.visual ?? 'auto') === 'auto' ? 'on' : ''}`} onClick={() => setR({ ...r, visual: 'auto' })}>Auto</button>
             <button class={`chip ${r.visual === 'piano' ? 'on' : ''}`} disabled={!hasNotes(r.sound)} onClick={() => setR({ ...r, visual: 'piano' })}>Piano keys</button>
             <button class={`chip ${r.visual === 'strings' ? 'on' : ''}`} disabled={!hasNotes(r.sound)} onClick={() => setR({ ...r, visual: 'strings' })}>Strings</button>
             <button class={`chip ${r.visual === 'lamp' ? 'on' : ''}`} onClick={() => setR({ ...r, visual: 'lamp' })}>Lamp</button>
@@ -162,7 +165,7 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
             <div style="width:64px;height:64px;margin:0 auto;color:var(--accent)"><MoodGlyph id={moodId} /></div>
             <div class="eyebrow" style="margin-top:8px">Your {mood.name.toLowerCase()} sound</div>
             <h2 style="margin:6px 0">{displayName(r.sound).title}</h2>
-            <p class="muted" style="margin:0">{r.beat.on ? `${feelName(r.beat.rate)} beat` : 'No beat'} · {r.minutes} min · {r.visual === 'scene' ? SCENES.find((x) => x.id === r.scene)?.name : r.visual === 'piano' ? 'Piano keys' : r.visual === 'strings' ? 'Strings' : 'Lamp'}</p>
+            <p class="muted" style="margin:0">{r.beat.on ? `${feelName(r.beat.rate)} beat` : 'No beat'} · {r.minutes} min · {r.visual === 'scene' || (r.visual ?? 'auto') === 'auto' ? SCENES.find((x) => x.id === r.scene)?.name : r.visual === 'piano' ? 'Piano keys' : r.visual === 'strings' ? 'Strings' : 'Lamp'}</p>
             <p class="tiny faint" style="margin:10px 0 0">Taste changes from day to day. Run it again any time.</p>
           </div>
           <button class="btn primary block" onClick={() => { saveRecipe(moodId, r); go(`/m/${moodId}`); }}>Save and start</button>

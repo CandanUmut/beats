@@ -170,6 +170,11 @@ export function Settings() {
         ))}
       </div>
       <div class="card">
+        <h3 style="margin-top:0">The cat</h3>
+        <Toggle label="Cat companion" hint="He wanders, naps, eats and shows you around. Tap to pet him." checked={s.cat} onChange={(cat) => updateSettings({ cat })} />
+        <Toggle label="Cat sounds" hint="Soft purrs and the odd meow" checked={s.catSounds} onChange={(catSounds) => updateSettings({ catSounds })} />
+      </div>
+      <div class="card">
         <h3 style="margin-top:0">Visuals</h3>
         <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Lamp' }]} />
         <p class="tiny faint" style="margin-bottom:0">Animations move slowly and never flash. If your device asks for reduced motion, the falling notes are turned off.</p>

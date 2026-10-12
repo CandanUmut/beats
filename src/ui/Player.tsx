@@ -8,6 +8,7 @@ import { settings, updateSettings, recipeFor, saveRecipe, resetRecipe, isCustom,
 import { recordSession } from '../data/usage';
 import { db } from '../data/db';
 import { BEAT_FEELS, MINUTE_OPTIONS, MOOD_BY_ID, STRENGTH, feelName, type MoodId, type Recipe, type Visual } from '../data/moods';
+export type { Visual };
 import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
 import { InstrumentView, type Timeline } from './Instrument';
 import { SceneView, SceneThumb } from './Scene';
@@ -169,9 +170,7 @@ export function Player(p: PlayerProps) {
   const playing = running && (status === 'playing' || status === 'stopping');
   const item = SOUND_BY_ID[sound];
   // What the stage shows: a scene, the piano or strings (needs notes), or the lamp.
-  const notes = hasNotes(sound);
-  const wanted: Visual = recipe.visual ?? 'scene';
-  const view: Visual = (wanted === 'piano' || wanted === 'strings') && !notes ? 'scene' : wanted;
+  const view = resolveView(recipe);
   const sceneId: SceneId = recipe.scene ?? 'forest';
   const breathWord = SCENES.find((x) => x.id === sceneId)?.breath ?? 'the light';
 
@@ -317,16 +316,17 @@ export function Player(p: PlayerProps) {
             showPill={false}
             hint={recipe.breathing ? 'Press play, then <b>breathe with the light</b>: in as it rises, out as it falls.' : 'Press play. The keys follow the music.'}
             onSwitch={() => setTune('look')}
+            switchLabel="View"
             onPart={(title, composer) => { const d = displayForPart(title); setNowPlaying(d ? { title: d.title, composer: d.sub } : { title, composer }); }}
           />
         ) : view === 'scene' ? (
           <SceneView scene={sceneId} playing={playing} breathing={recipe.breathing} pattern={pattern} hint={recipe.breathing ? `Press play, then <b>breathe with ${breathWord}</b>: in as it rises, out as it falls.` : null}>
-            <button class="view-pill" onClick={() => setTune('look')}>Change view</button>
+            <button class="view-pill" onClick={() => setTune('look')}><Icon name="eye" size={14} /> View</button>
           </SceneView>
         ) : (
           <div class="lamp-wrap">
             <Orb pattern={pattern} active={recipe.breathing} playing={playing} label={playing ? 'Just listen' : 'Press play'} />
-            <button class="view-pill" onClick={() => setTune('look')}>Change view</button>
+            <button class="view-pill" onClick={() => setTune('look')}><Icon name="eye" size={14} /> View</button>
           </div>
         )}
         {view === 'lamp' && recipe.breathing && !playing && (
@@ -519,21 +519,22 @@ function TuneSheet(o: {
       </div>
 
       <div class="sheet-section" id="tune-look">
-        <h3><Icon name="leaf" />View</h3>
+        <h3><Icon name="eye" />View</h3>
         <div class="scene-grid">
           {SCENES.map((sc) => (
-            <button class={`scene-opt ${r.visual === 'scene' && r.scene === sc.id ? 'on' : ''}`} onClick={() => set({ visual: 'scene', scene: sc.id })}>
+            <button class={`scene-opt ${(r.visual === 'scene' || (r.visual ?? 'auto') === 'auto') && r.scene === sc.id ? 'on' : ''}`} onClick={() => set({ visual: r.visual === 'auto' || !r.visual ? 'auto' : 'scene', scene: sc.id })}>
               <SceneThumb scene={sc.id} />
               <span>{sc.name}</span>
             </button>
           ))}
         </div>
         <div class="chips" style="margin-top:8px">
+          <button class={`chip ${(r.visual ?? 'auto') === 'auto' ? 'on' : ''}`} onClick={() => set({ visual: 'auto' })}>Auto</button>
           <button class={`chip ${r.visual === 'piano' ? 'on' : ''}`} disabled={!hasNotes(r.sound)} onClick={() => set({ visual: 'piano' })}>Piano keys</button>
           <button class={`chip ${r.visual === 'strings' ? 'on' : ''}`} disabled={!hasNotes(r.sound)} onClick={() => set({ visual: 'strings' })}>Strings</button>
           <button class={`chip ${r.visual === 'lamp' ? 'on' : ''}`} onClick={() => set({ visual: 'lamp' })}>Lamp</button>
         </div>
-        {!hasNotes(r.sound) && <p class="explain">Piano keys and strings follow the notes, so they need music with notes (not rain, noise or your own file).</p>}
+        <p class="explain">Auto shows the strings for string music and your scene for everything else. Piano keys and strings follow the notes, so they need music with notes.</p>
       </div>
 
       <div class="sheet-section" id="tune-breathing">
@@ -721,6 +722,14 @@ function ExportSheet({ onClose, maxMinutes, make }: { onClose: () => void; maxMi
 function HeadphoneCheck({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<'lr' | 'mono'>('lr');
   return step === 'lr' ? <LeftRight onNext={() => setStep('mono')} /> : <Mono onNext={onDone} />;
+}
+
+/** Which view to show: an explicit choice, or 'auto' (strings for string music, else the scene). */
+export function resolveView(r: Recipe): Exclude<Visual, 'auto'> {
+  const v = r.visual ?? 'auto';
+  if (v === 'auto') return r.sound === 'strings' ? 'strings' : 'scene';
+  if ((v === 'piano' || v === 'strings') && !hasNotes(r.sound)) return 'scene';
+  return v;
 }
 
 /** Piano/strings animations need note data; noise and drones have none. */

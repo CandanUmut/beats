@@ -214,9 +214,11 @@ export function drawScene(c: Ctx, id: SceneId, W: number, H: number, f: SceneFra
       const far = mulberry32(11), mid = mulberry32(12), near = mulberry32(13);
       for (let i = 0; i < 26; i++) pine(c, far() * W, H * (0.7 + far() * 0.04), H * (0.14 + far() * 0.08), '#33463e');
       // Mist rises with your breath.
-      const mist = waveLine(W, H * (0.95 - 0.5 * L), 6, 0.8, t * 0.2);
-      fillBelow(c, W, H, mist, grad(c, H * 0.4, H, [[0, 'rgba(230,236,220,0.38)'], [1, 'rgba(230,236,220,0.12)']]));
-      strokeLine(c, W, mist, '#eef1e4', 2, 0.55, 14);
+      const mistY = H * (0.95 - 0.5 * L);
+      const mist = waveLine(W, mistY, 6, 0.8, t * 0.2);
+      // A soft band of mist: brightest just under its top, fading below. No hard edge.
+      fillBelow(c, W, H, mist, grad(c, mistY - 6, H, [[0, 'rgba(236,240,226,0.42)'], [0.12, 'rgba(236,240,226,0.3)'], [0.5, 'rgba(236,240,226,0.14)'], [1, 'rgba(236,240,226,0.08)']]));
+      fillBelow(c, W, H, waveLine(W, mistY - 14, 8, 0.6, -t * 0.15), grad(c, mistY - 30, mistY + 40, [[0, 'rgba(236,240,226,0)'], [1, 'rgba(236,240,226,0.16)']]));
       for (let i = 0; i < 14; i++) pine(c, mid() * W, H * (0.86 + mid() * 0.04), H * (0.26 + mid() * 0.1), '#22302a');
       for (let i = 0; i < 5; i++) {
         const side = i % 2 ? W * (0.88 + near() * 0.14) : W * (near() * 0.14);
@@ -244,41 +246,78 @@ export function drawScene(c: Ctx, id: SceneId, W: number, H: number, f: SceneFra
       const front = waveLine(W, H * (0.95 - 0.28 * L), 7, 1.1, t * 0.5);
       fillBelow(c, W, H, front, grad(c, H * 0.6, H, [[0, '#4c3a48'], [1, '#1c1620']]));
       strokeLine(c, W, front, '#f3e6d6', 2.5, 0.85, 8);
-      // A rock on the right.
-      c.fillStyle = '#120e14';
-      c.beginPath();
-      c.moveTo(W * 0.72, H);
-      c.quadraticCurveTo(W * 0.8, H * 0.74, W * 0.92, H * 0.8);
-      c.quadraticCurveTo(W, H * 0.82, W, H);
-      c.fill();
+      // Moon-path reflection under the low glow.
+      c.fillStyle = '#f1c9a4';
+      for (let i = 0; i < 8; i++) {
+        const y = H * 0.5 + i * H * 0.03;
+        const w = W * (0.16 - i * 0.012) * (0.8 + 0.2 * Math.sin(t * 0.7 + i));
+        c.globalAlpha = 0.35 - i * 0.035;
+        c.fillRect(W * 0.3 - w / 2 + Math.sin(t * 0.4 + i) * 3, y, w, 1.6);
+      }
+      c.globalAlpha = 1;
+      // Foam just under the breath line.
+      fillBelow(c, W, H, (x) => front(x) + 2, grad(c, H * 0.6, H, [[0, 'rgba(243,230,214,0.18)'], [0.2, 'rgba(243,230,214,0)']]));
+      // Two rocks, with a warm rim light from the low sky.
+      const rock = (x0: number, w: number, h: number) => {
+        c.beginPath();
+        c.moveTo(x0, H);
+        c.quadraticCurveTo(x0 + w * 0.2, H - h, x0 + w * 0.55, H - h * 0.92);
+        c.quadraticCurveTo(x0 + w * 0.9, H - h * 0.85, x0 + w, H);
+        c.closePath();
+        c.fillStyle = '#1a141c';
+        c.fill();
+        c.globalAlpha = 0.45;
+        c.strokeStyle = '#e7b08a';
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(x0 + w * 0.08, H - h * 0.55);
+        c.quadraticCurveTo(x0 + w * 0.2, H - h, x0 + w * 0.55, H - h * 0.92);
+        c.stroke();
+        c.globalAlpha = 1;
+      };
+      rock(W * 0.7, W * 0.32, H * 0.22);
+      rock(W * 0.6, W * 0.12, H * 0.09);
       return;
     }
     case 'lake': {
       const hor = H * 0.58;
-      c.fillStyle = grad(c, 0, hor, [[0, '#1c2b2a'], [0.6, '#476a62'], [1, '#c2d3b0']]);
+      c.fillStyle = grad(c, 0, hor, [[0, '#2b4340'], [0.55, '#6f938a'], [1, '#e1e8c8']]);
       c.fillRect(0, 0, W, hor);
       // The sun rises behind the peaks as you breathe in.
       const sunY = hor - H * (0.02 + 0.3 * L);
-      glow(c, W * 0.5, sunY, H * 0.5, '#f4e2a8', f.breathing ? 0.55 : 0.4);
-      c.fillStyle = '#f7ecc4';
+      glow(c, W * 0.5, sunY, H * 0.5, '#f8e8b4', f.breathing ? 0.6 : 0.45);
+      c.fillStyle = '#fbf0cc';
       c.beginPath();
       c.arc(W * 0.5, sunY, H * 0.06, 0, Math.PI * 2);
       c.fill();
-      ridge(c, W, hor + 2, hor - H * 0.02, H * 0.26, 41, '#2f4842', true);
-      ridge(c, W, hor + 2, hor, H * 0.12, 42, '#22362f');
-      c.fillStyle = grad(c, hor, H, [[0, '#4b6a62'], [1, '#18241f']]);
+      ridge(c, W, hor + 2, hor - H * 0.02, H * 0.26, 41, '#3b5953', true);
+      ridge(c, W, hor + 2, hor, H * 0.12, 42, '#2a433b');
+      c.fillStyle = grad(c, hor, H, [[0, '#5d8178'], [1, '#1b2a25']]);
       c.fillRect(0, hor, W, H - hor);
-      // Reflection of the sun and soft ripples.
-      glow(c, W * 0.5, hor + (hor - sunY) * 0.6, H * 0.25, '#f4e2a8', 0.25);
-      c.strokeStyle = '#d9e4cc';
-      for (let i = 0; i < 7; i++) {
-        const y = hor + 10 + i * (H - hor) / 8;
-        const x = (W * ((i * 0.37 + t * 0.01) % 1));
-        c.globalAlpha = 0.25;
+      // Mirrored, softened reflection of the mountains.
+      c.save();
+      c.beginPath();
+      c.rect(0, hor, W, H - hor);
+      c.clip();
+      c.translate(0, hor * 2);
+      c.scale(1, -1);
+      c.globalAlpha = 0.25;
+      ridge(c, W, hor + 2, hor - H * 0.02, H * 0.26, 41, '#3b5953', true);
+      c.restore();
+      c.globalAlpha = 1;
+      glow(c, W * 0.5, hor + (hor - sunY) * 0.6, H * 0.25, '#f8e8b4', 0.3);
+      // Ripples of varied length and brightness, drifting slowly.
+      const rr = mulberry32(77);
+      for (let i = 0; i < 14; i++) {
+        const y = hor + 6 + rr() * (H - hor - 10);
+        const len = W * (0.05 + rr() * 0.18);
+        const x = ((rr() * W + t * (4 + rr() * 6)) % (W + len)) - len;
+        c.globalAlpha = 0.08 + rr() * 0.17;
+        c.strokeStyle = '#e6eed8';
         c.lineWidth = 1;
         c.beginPath();
         c.moveTo(x, y);
-        c.lineTo(x + W * 0.18, y);
+        c.lineTo(x + len, y);
         c.stroke();
       }
       c.globalAlpha = 1;
@@ -328,22 +367,23 @@ export function drawScene(c: Ctx, id: SceneId, W: number, H: number, f: SceneFra
       ridge(c, W, H, H * 0.82, H * 0.07, 52, '#4a3d40');
       ridge(c, W, H, H * 0.9, H * 0.05, 53, '#2e2528');
       // Grass blades swaying in the foreground.
-      c.strokeStyle = '#1d1719';
-      c.lineWidth = 1.5;
+      c.fillStyle = '#1d1719';
       const g = mulberry32(61);
-      for (let i = 0; i < 70; i++) {
-        const x = g() * W, h = 10 + g() * 26, ph = g() * 6.28;
-        const sw = Math.sin(t * 0.6 + ph + x * 0.01) * 4;
+      for (let i = 0; i < 80; i++) {
+        const x = g() * W, h = 12 + g() * 28, ph = g() * 6.28, base = 2 + g() * 2;
+        const sw = Math.sin(t * 0.6 + ph + x * 0.01) * 5;
+        // A tapered, curved blade.
         c.beginPath();
-        c.moveTo(x, H);
-        c.quadraticCurveTo(x + sw * 0.4, H - h * 0.6, x + sw, H - h);
-        c.stroke();
+        c.moveTo(x - base / 2, H);
+        c.quadraticCurveTo(x + sw * 0.4 - base * 0.2, H - h * 0.6, x + sw, H - h);
+        c.quadraticCurveTo(x + sw * 0.4 + base * 0.2, H - h * 0.6, x + base / 2, H);
+        c.fill();
       }
       // Two birds gliding slowly.
       c.strokeStyle = '#2a2026';
       c.lineWidth = 1.6;
       for (let i = 0; i < 2; i++) {
-        const bx = ((t * 6 + i * W * 0.4) % (W + 60)) - 30, by = H * (0.25 + i * 0.08) + Math.sin(t * 0.5 + i) * 6;
+        const bx = ((t * 6 + i * W * 0.4) % (W + 60)) - 30, by = H * (0.5 + i * 0.06) + Math.sin(t * 0.5 + i) * 6;
         const flap = 4 + 2 * Math.sin(t * 1.2 + i);
         c.beginPath();
         c.moveTo(bx - 8, by - flap * 0.5);
