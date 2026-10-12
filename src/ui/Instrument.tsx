@@ -31,13 +31,17 @@ function firstVisible(notes: VisualNote[], t: number): number {
   return lo;
 }
 
-export function InstrumentView({ kind, timeline, playing, breathing, pattern, onPart, showPill = true }: {
+export function InstrumentView({ kind, timeline, playing, breathing, pattern, onPart, showPill = true, hint, onSwitch }: {
   kind: 'piano' | 'strings';
   timeline: Timeline | null;
   playing: boolean;
   breathing: boolean;
   pattern: BreathPattern;
   showPill?: boolean;
+  /** Instruction shown inside the canvas before play. */
+  hint?: string | null;
+  /** Switch to the lamp view. */
+  onSwitch?: () => void;
   onPart?: (title: string, composer: string) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -142,11 +146,19 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
   return (
     <div class="instrument">
       <canvas ref={canvas} class={`instrument-canvas ${kind}`} aria-label={kind === 'piano' ? 'Piano animation' : 'Strings animation'} role="img" />
-      <div class="breath-pill" ref={pill}>
-        <span class="breath-dot" ref={dot} />
-        <span ref={label}>Breathe in</span>
-        <span class="num" ref={num} />
-      </div>
+      {hint && <div class="canvas-hint" style={{ opacity: playing ? 0 : 1 }} dangerouslySetInnerHTML={{ __html: hint }} />}
+      {onSwitch && (
+        <button class="view-btn" aria-label="Switch to the lamp" onClick={onSwitch}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="9" stroke-opacity=".45" /></svg>
+        </button>
+      )}
+      {showPill && (
+        <div class="breath-pill" ref={pill}>
+          <span class="breath-dot" ref={dot} />
+          <span ref={label}>Breathe in</span>
+          <span class="num" ref={num} />
+        </div>
+      )}
     </div>
   );
 }
@@ -172,14 +184,17 @@ function drawTide(c: CanvasRenderingContext2D, W: number, _H: number, floor: num
   c.globalAlpha = 0.16 + 0.08 * level;
   c.fillStyle = g;
   c.fill();
-  // The bright edge of the tide.
-  c.globalAlpha = 0.9;
-  c.strokeStyle = accent;
-  c.lineWidth = 2.5;
+  // The bright edge of the tide, in ivory so it never looks like a note or a string.
+  c.globalAlpha = 0.85;
+  c.strokeStyle = '#efe6d8';
+  c.shadowColor = accent;
+  c.shadowBlur = 12;
+  c.lineWidth = 3;
   c.beginPath();
   for (let x = 0; x <= W; x += 6) { const y = wave(x); if (x === 0) c.moveTo(x, y); else c.lineTo(x, y); }
   c.lineTo(W, wave(W));
   c.stroke();
+  c.shadowBlur = 0;
   c.globalAlpha = 1;
 }
 
@@ -305,8 +320,8 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
     // The string: a gentle standing wave whose height follows the music.
     const amp = o.reduce ? 0 : (3 + 9 * (3 - i) / 3) * a;
     c.strokeStyle = o.accent;
-    c.globalAlpha = 0.35 + 0.55 * a;
-    c.lineWidth = 1.2 + i * 0.5;
+    c.globalAlpha = 0.25 + 0.4 * a;
+    c.lineWidth = 1.25;
     c.beginPath();
     for (let x = 0; x <= W; x += 4) {
       const u = x / W;
@@ -315,8 +330,8 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
       if (x === 0) c.moveTo(x, yy); else c.lineTo(x, yy);
     }
     c.stroke();
-    c.globalAlpha = 0.55;
-    c.fillStyle = '#b9ad9c';
+    c.globalAlpha = 0.6;
+    c.fillStyle = '#efe6d8';
     c.fillText(STRING_NAMES[i], 8, y - gap * 0.32);
   }
   c.globalAlpha = 1;

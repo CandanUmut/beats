@@ -118,7 +118,7 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
       {stage !== 'intro' && stage !== 'done' && <Steps n={3} at={stage === 'music' ? 0 : stage === 'beat' ? 1 : 2} />}
       {stage === 'intro' && (
         <>
-          <div class="session-head"><div class="eyebrow">Find my sound · {mood.name}</div><h1>A quick <em>taste test</em></h1></div>
+          <div class="session-head"><div class="eyebrow">Find my sound · {mood.name}</div><h1>A quick taste test</h1></div>
           <p class="lead">You'll hear a few versions, about {SLOT} seconds each. Tap any one to hear it again, and press <b>This one</b> on the version that feels best. About two minutes.</p>
           <div class="card">
             <p class="small" style="margin:0">Put on headphones if you have them, settle in, and listen for which one makes you feel more <b>{mood.name.toLowerCase()}</b>. There's no wrong answer.</p>
@@ -132,7 +132,7 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
             <div class="eyebrow">{stage === 'music' ? 'Step 1 · Music' : stage === 'beat' ? 'Step 2 · Beat' : 'Step 3 · Feel'}</div>
             <h1>{stage === 'music' ? 'Which music?' : stage === 'beat' ? 'Beat or no beat?' : 'Which feel?'}</h1>
           </div>
-          <p class="muted small">Now playing <b style="color:var(--text)">{label(idx).t}</b>. It moves on by itself; tap to go back.</p>
+          <p class="muted small">Each one plays for {SLOT} seconds, then the next. Tap a card to hear it again.</p>
           <div class="taste">
             {Array.from({ length: opts }, (_, i) => {
               const l = label(i);
@@ -160,7 +160,7 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
             <p class="tiny faint" style="margin:10px 0 0">Taste changes from day to day. Run it again any time.</p>
           </div>
           <button class="btn primary block" onClick={() => { saveRecipe(moodId, choice); go(`/m/${moodId}`); }}>Save and start</button>
-          <button class="btn ghost block" style="margin-top:8px" onClick={() => { setChoice(base); setStage('intro'); }}><Icon name="spark" /> Try again</button>
+          <button class="btn ghost block" style="margin-top:8px" onClick={() => { setChoice(base); setStage('intro'); }}><Icon name="headphones" /> Try again</button>
         </>
       )}
     </div>

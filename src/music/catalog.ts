@@ -32,27 +32,31 @@ export interface Piece {
   autoPedal?: boolean;
   license: 'Public Domain' | 'CC BY-SA 2.5' | 'CC BY-SA 3.0' | 'CC BY-SA 4.0';
   source: string;
+  /** Friendly name, a couple of feel words, and the catalogue number. */
+  short?: string;
+  feel?: string;
+  opus?: string;
 }
 
 const M = 'https://www.mutopiaproject.org/ftp/';
 
 export const PIECES: Piece[] = [
-  { id: 'chopin-noct-9-2', title: 'Nocturne in E♭ major, Op. 9 No. 2', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'chopin_nocturne_op9_n2.mid', tonic: 3, tempo: 0.9, pedalPerBar: 2, license: 'CC BY-SA 3.0', source: `${M}ChopinFF/O9/chopin_nocturne_op9_n2/` },
-  { id: 'chopin-noct-9-1', title: 'Nocturne in B♭ minor, Op. 9 No. 1', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'nocturne_in_b-flat_minor.mid', tonic: 10, tempo: 0.86, license: 'CC BY-SA 2.5', source: `${M}ChopinFF/O9/nocturne_in_b-flat_minor/` },
-  { id: 'chopin-noct-27-2', title: 'Nocturne in D♭ major, Op. 27 No. 2', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'chopin-nocturne-8.mid', tonic: 1, tempo: 0.92, license: 'CC BY-SA 3.0', source: `${M}ChopinFF/O27/chopin-nocturne-8/` },
-  { id: 'chopin-noct-72-1', title: 'Nocturne in E minor, Op. 72 No. 1', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'nocturne_in_e_minor.mid', tonic: 4, tempo: 0.92, license: 'CC BY-SA 4.0', source: `${M}ChopinFF/O72/nocturne_in_e_minor/` },
-  { id: 'chopin-prel-4', title: 'Prelude in E minor, Op. 28 No. 4', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-4.mid', tonic: 4, tempo: 0.92, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-4/` },
-  { id: 'chopin-prel-6', title: 'Prelude in B minor, Op. 28 No. 6', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-6.mid', tonic: 11, tempo: 0.95, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-6/` },
-  { id: 'chopin-prel-15', title: 'Prelude in D♭ major, Op. 28 No. 15 ("Raindrop")', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-15.mid', tonic: 1, tempo: 0.92, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-15/` },
-  { id: 'chopin-prel-20', title: 'Prelude in C minor, Op. 28 No. 20', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-20.mid', tonic: 0, tempo: 0.95, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-20/` },
-  { id: 'chopin-prel-45', title: 'Prelude in C♯ minor, Op. 45', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'chopin_prelude_op45.mid', tonic: 1, tempo: 0.9, license: 'Public Domain', source: `${M}ChopinFF/O45/chopin_prelude_op45/` },
-  { id: 'satie-gym-1', title: 'Gymnopédie No. 1', composer: 'Erik Satie', collection: 'Satie', file: 'gymnopedie_1.mid', tonic: 2, tempo: 0.92, license: 'Public Domain', source: `${M}SatieE/gymnopedie_1/` },
-  { id: 'satie-gym-2', title: 'Gymnopédie No. 2', composer: 'Erik Satie', collection: 'Satie', file: 'gymnopedie_2.mid', tonic: 0, tempo: 0.92, license: 'Public Domain', source: `${M}SatieE/gymnopedie_2/` },
-  { id: 'satie-gym-3', title: 'Gymnopédie No. 3', composer: 'Erik Satie', collection: 'Satie', file: 'gymnopedie_3.mid', tonic: 9, tempo: 0.92, license: 'Public Domain', source: `${M}SatieE/gymnopedie_3/` },
-  { id: 'satie-gno-1', title: 'Gnossienne No. 1', composer: 'Erik Satie', collection: 'Satie', file: 'no_1.mid', tonic: 5, tempo: 0.82, license: 'CC BY-SA 4.0', source: `${M}SatieE/Gnossienne/no_1/` },
-  { id: 'debussy-clair', title: 'Clair de lune', composer: 'Claude Debussy', collection: 'Debussy', file: 'debussy_Ste_Bergamesq_Clair.mid', tonic: 1, tempo: 0.92, license: 'Public Domain', source: `${M}DebussyC/L75/debussy_Ste_Bergamesq_Clair/` },
-  { id: 'debussy-arab-1', title: 'Première Arabesque', composer: 'Claude Debussy', collection: 'Debussy', file: 'debussy_Arabesque_1.mid', tonic: 4, tempo: 0.82, pedalPerBar: 2, license: 'Public Domain', source: `${M}DebussyC/L66/debussy_Arabesque_1/` },
-  { id: 'bach-prel-c', title: 'Prelude in C major, BWV 846', composer: 'J. S. Bach', collection: 'Bach', file: 'wtk1-prelude1.mid', tonic: 0, tempo: 0.85, license: 'Public Domain', source: `${M}BachJS/BWV846/wtk1-prelude1/` },
+  { id: 'chopin-noct-9-2', title: 'Nocturne in E♭ major, Op. 9 No. 2', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'chopin_nocturne_op9_n2.mid', tonic: 3, tempo: 0.9, pedalPerBar: 2, license: 'CC BY-SA 3.0', source: `${M}ChopinFF/O9/chopin_nocturne_op9_n2/` , short: 'Nocturne No. 2', feel: 'dreamy, singing', opus: 'Op. 9 No. 2' },
+  { id: 'chopin-noct-9-1', title: 'Nocturne in B♭ minor, Op. 9 No. 1', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'nocturne_in_b-flat_minor.mid', tonic: 10, tempo: 0.86, license: 'CC BY-SA 2.5', source: `${M}ChopinFF/O9/nocturne_in_b-flat_minor/` , short: 'Nocturne No. 1', feel: 'wistful, slow', opus: 'Op. 9 No. 1' },
+  { id: 'chopin-noct-27-2', title: 'Nocturne in D♭ major, Op. 27 No. 2', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'chopin-nocturne-8.mid', tonic: 1, tempo: 0.92, license: 'CC BY-SA 3.0', source: `${M}ChopinFF/O27/chopin-nocturne-8/` , short: 'Nocturne in D♭', feel: 'warm, flowing', opus: 'Op. 27 No. 2' },
+  { id: 'chopin-noct-72-1', title: 'Nocturne in E minor, Op. 72 No. 1', composer: 'Frédéric Chopin', collection: 'Chopin: Nocturnes', file: 'nocturne_in_e_minor.mid', tonic: 4, tempo: 0.92, license: 'CC BY-SA 4.0', source: `${M}ChopinFF/O72/nocturne_in_e_minor/` , short: 'Nocturne in E minor', feel: 'tender, quiet', opus: 'Op. 72 No. 1' },
+  { id: 'chopin-prel-4', title: 'Prelude in E minor, Op. 28 No. 4', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-4.mid', tonic: 4, tempo: 0.92, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-4/` , short: 'Prelude in E minor', feel: 'quiet, melancholy', opus: 'Op. 28 No. 4' },
+  { id: 'chopin-prel-6', title: 'Prelude in B minor, Op. 28 No. 6', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-6.mid', tonic: 11, tempo: 0.95, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-6/` , short: 'Prelude in B minor', feel: 'slow, low and deep', opus: 'Op. 28 No. 6' },
+  { id: 'chopin-prel-15', title: 'Prelude in D♭ major, Op. 28 No. 15 ("Raindrop")', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-15.mid', tonic: 1, tempo: 0.92, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-15/` , short: 'Raindrop Prelude', feel: 'gentle, like rain', opus: 'Op. 28 No. 15' },
+  { id: 'chopin-prel-20', title: 'Prelude in C minor, Op. 28 No. 20', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'Chop-28-20.mid', tonic: 0, tempo: 0.95, license: 'Public Domain', source: `${M}ChopinFF/O28/Chop-28-20/` , short: 'Prelude in C minor', feel: 'slow, solemn chords', opus: 'Op. 28 No. 20' },
+  { id: 'chopin-prel-45', title: 'Prelude in C♯ minor, Op. 45', composer: 'Frédéric Chopin', collection: 'Chopin: Preludes', file: 'chopin_prelude_op45.mid', tonic: 1, tempo: 0.9, license: 'Public Domain', source: `${M}ChopinFF/O45/chopin_prelude_op45/` , short: 'Prelude in C♯ minor', feel: 'drifting, hazy', opus: 'Op. 45' },
+  { id: 'satie-gym-1', title: 'Gymnopédie No. 1', composer: 'Erik Satie', collection: 'Satie', file: 'gymnopedie_1.mid', tonic: 2, tempo: 0.92, license: 'Public Domain', source: `${M}SatieE/gymnopedie_1/` , short: 'Gymnopédie No. 1', feel: 'floating, simple', opus: '' },
+  { id: 'satie-gym-2', title: 'Gymnopédie No. 2', composer: 'Erik Satie', collection: 'Satie', file: 'gymnopedie_2.mid', tonic: 0, tempo: 0.92, license: 'Public Domain', source: `${M}SatieE/gymnopedie_2/` , short: 'Gymnopédie No. 2', feel: 'soft, unhurried', opus: '' },
+  { id: 'satie-gym-3', title: 'Gymnopédie No. 3', composer: 'Erik Satie', collection: 'Satie', file: 'gymnopedie_3.mid', tonic: 9, tempo: 0.92, license: 'Public Domain', source: `${M}SatieE/gymnopedie_3/` , short: 'Gymnopédie No. 3', feel: 'gentle, a little sad', opus: '' },
+  { id: 'satie-gno-1', title: 'Gnossienne No. 1', composer: 'Erik Satie', collection: 'Satie', file: 'no_1.mid', tonic: 5, tempo: 0.82, license: 'CC BY-SA 4.0', source: `${M}SatieE/Gnossienne/no_1/` , short: 'Gnossienne No. 1', feel: 'mysterious, slow', opus: '' },
+  { id: 'debussy-clair', title: 'Clair de lune', composer: 'Claude Debussy', collection: 'Debussy', file: 'debussy_Ste_Bergamesq_Clair.mid', tonic: 1, tempo: 0.92, license: 'Public Domain', source: `${M}DebussyC/L75/debussy_Ste_Bergamesq_Clair/` , short: 'Clair de lune', feel: 'moonlit, glowing', opus: 'Suite bergamasque' },
+  { id: 'debussy-arab-1', title: 'Première Arabesque', composer: 'Claude Debussy', collection: 'Debussy', file: 'debussy_Arabesque_1.mid', tonic: 4, tempo: 0.82, pedalPerBar: 2, license: 'Public Domain', source: `${M}DebussyC/L66/debussy_Arabesque_1/` , short: 'Arabesque No. 1', feel: 'flowing, bright', opus: '' },
+  { id: 'bach-prel-c', title: 'Prelude in C major, BWV 846', composer: 'J. S. Bach', collection: 'Bach', file: 'wtk1-prelude1.mid', tonic: 0, tempo: 0.85, license: 'Public Domain', source: `${M}BachJS/BWV846/wtk1-prelude1/` , short: 'Prelude in C', feel: 'steady, even', opus: 'BWV 846' },
 ];
 
 export const PIECE_BY_ID: Record<string, Piece> = Object.fromEntries(PIECES.map((p) => [p.id, p]));

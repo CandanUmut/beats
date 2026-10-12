@@ -83,9 +83,8 @@ export function Calm() {
       {step === 0 && (
         <>
           <Head mood="calm" />
-          <details class="card tight intro-card" open>
-            <summary>First, step away <Icon name="chevdown" size={16} /></summary>
-            <p class="small muted" style="margin:6px 0 10px">If you can, move away from whatever set this off. Nothing needs a reply right now. Then press play.</p>
+          <details class="card tight intro-card">
+            <summary><span>First, step away. Nothing needs a reply right now.<div class="tiny faint" style="font-weight:500">Rate how heated you feel (optional)</div></span> <Icon name="chevdown" size={16} /></summary>
             <div class="field-head"><span>How heated do you feel? <span class="faint">(optional)</span></span></div>
             <Rating label="Before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="calm" high="boiling" />
           </details>
@@ -151,12 +150,11 @@ export function Urge() {
       {step < 2 && (
         <>
           <Head mood="grounded" />
-          <details class="card tight intro-card" open={step === 0}>
-            <summary>{plan ? `My plan: ${plan}` : 'Before you start'} <Icon name="chevdown" size={16} /></summary>
-            <p class="small muted" style="margin:6px 0 10px">Urges usually peak and fade within minutes if you don't act on them. Your only job is to wait and watch it.</p>
-            <div class="field-head"><span>How strong is the urge? <span class="faint">(optional)</span></span></div>
+          <details class="card tight intro-card">
+            <summary><span>{plan ? `My plan: ${plan}` : 'Urges peak and pass. Your only job is to wait.'}<div class="tiny faint" style="font-weight:500">Rate the urge, make a plan (optional)</div></span> <Icon name="chevdown" size={16} /></summary>
+            <div class="field-head" style="margin-top:10px"><span>How strong is the urge?</span></div>
             <Rating label="Urge before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="none" high="overwhelming" />
-            <div class="field-head" style="margin-top:14px"><span>While I wait, I'll… <span class="faint">(optional)</span></span></div>
+            <div class="field-head" style="margin-top:14px"><span>While I wait, I'll…</span></div>
             <textarea value={plan} placeholder="My plan" onInput={(e) => { setPlan((e.target as HTMLTextAreaElement).value); ci.current.plan = (e.target as HTMLTextAreaElement).value; }} />
             <div class="chips" style="margin-top:8px">
               {PLAN_IDEAS.map((p) => <button class="chip" onClick={() => { const v = plan ? `${plan}, ${p.toLowerCase()}` : p; setPlan(v); ci.current.plan = v; }}>{p}</button>)}
@@ -257,20 +255,22 @@ export function Sleep() {
               <span><div class="eyebrow">Good morning</div><div style="font-weight:650">How did you sleep? Two taps.</div></span>
             </button>
           )}
-          <Player moodId="sleepy" sleep guide={(t) => (t < 60 ? 'Get comfortable. Close your eyes when you like.' : null)} onFinish={(_, early) => !early && setDone(true)} />
-          <div class="card tight">
-            <button class="row-link" style="border:0;padding:4px 0" onClick={() => setShowHabits(!showHabits)}>
-              <span><b>Tonight's habits</b> <span class="muted small">· {checked.size} of {SLEEP_HABITS.length}</span></span>
-              <Icon name={showHabits ? 'chevdown' : 'chev'} />
-            </button>
-            {showHabits && SLEEP_HABITS.map((h, i) => (
-              <label class="check">
-                <input type="checkbox" checked={checked.has(i)} onChange={() => { const n = new Set(checked); n.has(i) ? n.delete(i) : n.add(i); setChecked(n); }} />
-                <span class="small">{h}</span>
-              </label>
-            ))}
-          </div>
-          <p class="tiny faint center">Start it once you're in bed. It fades to silence on its own.</p>
+          <Player moodId="sleepy" sleep note="Start it once you're in bed. It fades to silence on its own." guide={(t) => (t < 60 ? 'Get comfortable. Close your eyes when you like.' : null)} onFinish={(_, early) => !early && setDone(true)}>
+            {(_, playing) => !playing && (
+              <div class="card tight">
+                <button class="row-link" style="border:0;padding:4px 0" onClick={() => setShowHabits(!showHabits)}>
+                  <span><b>Tonight's habits</b> <span class="muted small">· {checked.size} of {SLEEP_HABITS.length}</span></span>
+                  <Icon name={showHabits ? 'chevdown' : 'chev'} />
+                </button>
+                {showHabits && SLEEP_HABITS.map((h, i) => (
+                  <label class="check">
+                    <input type="checkbox" checked={checked.has(i)} onChange={() => { const n = new Set(checked); n.has(i) ? n.delete(i) : n.add(i); setChecked(n); }} />
+                    <span class="small">{h}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </Player>
         </>
       )}
     </div>

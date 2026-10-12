@@ -155,7 +155,8 @@ p { margin: 8px 0; }
 .small { font-size: 14px; }
 .tiny { font-size: 12.5px; }
 .center { text-align: center; }
-.eyebrow { text-transform: uppercase; letter-spacing: 0.14em; font-size: 11.5px; font-weight: 700; color: var(--faint); }
+.eyebrow { font-family: var(--serif); font-style: italic; letter-spacing: 0.01em; font-size: 15px; font-weight: 400; color: var(--muted); }
+.label-caps { text-transform: uppercase; letter-spacing: 0.12em; font-size: 11.5px; font-weight: 700; color: var(--faint); font-family: var(--sans); font-style: normal; }
 
 /* --- Cards ------------------------------------------------------------------ */
 .card {
@@ -314,12 +315,12 @@ textarea { min-height: 84px; resize: vertical; }
 /* Instrument canvas */
 .instrument { position: relative; width: 100%; margin: 4px 0 0; }
 .instrument-canvas {
-  display: block; width: 100%; height: 320px;
+  display: block; width: 100%; height: clamp(210px, 32dvh, 320px);
   border-radius: var(--radius);
   background: radial-gradient(120% 80% at 50% 0%, rgba(255, 238, 214, 0.05), rgba(0, 0, 0, 0.15));
   border: 1px solid var(--line);
 }
-.instrument-canvas.strings { height: 260px; }
+.instrument-canvas.strings { height: clamp(190px, 28dvh, 260px); }
 .breath-pill {
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: 10px;
@@ -343,7 +344,7 @@ textarea { min-height: 84px; resize: vertical; }
   width: 78px; height: 78px; border-radius: 50%; border: 0;
   background: var(--accent); color: #1a1512;
   display: grid; place-items: center; cursor: pointer;
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .play-btn svg { width: 30px; height: 30px; }
 .play-btn:disabled { opacity: 0.5; }
@@ -359,7 +360,7 @@ textarea { min-height: 84px; resize: vertical; }
 }
 .recipe .k { font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); font-weight: 700; display: flex; align-items: center; gap: 6px; }
 .recipe .k svg { width: 13px; height: 13px; color: var(--accent); }
-.recipe .val { font-weight: 650; font-size: 14.5px; line-height: 1.3; margin-top: 2px; }
+.recipe .val { font-weight: 650; font-size: 14.5px; line-height: 1.3; margin-top: 2px; text-wrap: balance; }
 
 .fact {
   display: flex; gap: 12px; align-items: flex-start;
@@ -411,7 +412,7 @@ textarea { min-height: 84px; resize: vertical; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .quick-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 18px; }
 .quick-row button {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; white-space: nowrap;
   background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
   padding: 14px 4px; color: var(--muted); font-size: 12.5px; font-weight: 650; cursor: pointer;
 }
@@ -490,8 +491,8 @@ textarea { min-height: 84px; resize: vertical; }
 .stage-glyph svg { width: 100%; height: 100%; }
 .stage > *:not(.stage-glyph) { position: relative; z-index: 1; }
 .breath-cue { text-align: center; min-height: 58px; margin-top: 10px; }
-.breath-cue .ph { font-family: var(--serif); font-size: 26px; line-height: 1.1; display: block; }
-.breath-cue .ct { color: var(--muted); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.breath-cue .ph { font-family: var(--serif); font-size: 26px; line-height: 1.1; display: block; transition: opacity 0.3s ease; }
+.breath-cue .ct { color: var(--muted); font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .fact-line { text-align: center; font-family: var(--serif); font-style: italic; color: var(--muted); font-size: 16.5px; margin: 8px 6px 0; line-height: 1.4; }
 .fact-line a { color: var(--accent); font-style: normal; font-family: var(--sans); font-size: 13.5px; font-weight: 650; text-decoration: none; white-space: nowrap; }
 .len-chip { justify-self: end; display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-weight: 650; cursor: pointer; }
@@ -508,3 +509,25 @@ textarea { min-height: 84px; resize: vertical; }
 details.more > summary { cursor: pointer; color: var(--accent); font-weight: 650; font-size: 14.5px; padding: 8px 0; list-style: none; }
 details.more > summary::-webkit-details-marker { display: none; }
 .group-head { display: flex; justify-content: space-between; align-items: baseline; }
+
+/* Round 2 */
+.btn.primary:disabled, .btn.cream:disabled { background: var(--surface-2); color: var(--faint); border-color: var(--line); box-shadow: none; }
+.home h1 { font-size: clamp(28px, 8vw, 34px); }
+h1 em { display: block; text-wrap: balance; }
+.sheet-head + .sheet-section { border-top: 0; }
+.canvas-hint {
+  position: absolute; left: 0; right: 0; top: 34%; transform: translateY(-50%);
+  text-align: center; padding: 0 28px; color: var(--muted); font-size: 15px; line-height: 1.45;
+  pointer-events: none; transition: opacity 0.6s ease;
+}
+.canvas-hint b { color: var(--text); font-weight: 650; }
+.view-btn {
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--line-2); background: rgba(20, 18, 16, 0.6);
+  color: var(--muted); display: grid; place-items: center; cursor: pointer;
+}
+.view-btn svg { width: 18px; height: 18px; }
+.lamp-wrap { position: relative; width: 100%; display: flex; justify-content: center; }
+.lib-item .op { color: var(--faint); font-size: 12px; }
+.lib-composer { font-family: var(--serif); font-size: 16px; color: var(--muted); margin: 14px 0 2px; }

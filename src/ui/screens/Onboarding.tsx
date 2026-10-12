@@ -35,11 +35,10 @@ export function Onboarding({ onDone, recheck }: { onDone: () => void; recheck?: 
 }
 
 function Safety({ onNext }: { onNext: () => void }) {
-  const [ok, setOk] = useState(false);
   return (
     <>
       <div class="eyebrow" style="margin-top:12px">Welcome to Steady</div>
-      <h1>Sound and breath, <em>tuned to how you want to feel.</em></h1>
+      <h1>Sound and breath, tuned to how you want to feel.</h1>
       <div class="card">
         <ul class="small" style="padding-left:20px;margin:0;display:grid;gap:8px">
           <li>Steady is a free sound and breathing tool, not medical care.</li>
@@ -53,16 +52,12 @@ function Safety({ onNext }: { onNext: () => void }) {
         <p class="tiny muted">{DISCLAIMER}</p>
       </details>
       <p class="tiny faint">Everything stays on this device. No account, no tracking.</p>
-      <label class="check">
-        <input type="checkbox" checked={ok} onChange={(e) => setOk((e.target as HTMLInputElement).checked)} />
-        <span>Got it</span>
-      </label>
-      <button class="btn primary block" disabled={!ok} onClick={onNext}>Continue</button>
+      <button class="btn primary block" onClick={onNext}>I understand, continue</button>
     </>
   );
 }
 
-function LeftRight({ onNext }: { onNext: () => void }) {
+export function LeftRight({ onNext }: { onNext: () => void }) {
   const [side, setSide] = useState<'left' | 'right' | null>(null);
   const [round, setRound] = useState(0);
   const [results, setResults] = useState<boolean[]>([]);
@@ -123,7 +118,7 @@ function LeftRight({ onNext }: { onNext: () => void }) {
   );
 }
 
-function Mono({ onNext }: { onNext: () => void }) {
+export function Mono({ onNext }: { onNext: () => void }) {
   const [heard, setHeard] = useState<'stereo' | 'mono' | 'unsure' | null>(null);
   const [playing, setPlaying] = useState(false);
   const [played, setPlayed] = useState(false);

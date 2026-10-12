@@ -39,7 +39,7 @@ export function App() {
   else if (r === '/recheck') page = <Onboarding recheck onDone={() => go('/settings')} />;
   else page = <Home />;
   return (
-    <div class="app" key={r}>
+    <div class={`app${r === '/' ? ' home' : ''}`} key={r}>
       {page}
       <HelpSheet />
     </div>

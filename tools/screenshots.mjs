@@ -24,8 +24,7 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await page.goto(base);
   await page.waitForSelector('h1');
   await shot('01-safety');
-  await page.check('input[type=checkbox]');
-  await page.click('text=Continue');
+  await page.click('text=I understand, continue');
   await shot('04-level');
   await page.click('text=Start');
   await page.waitForSelector('.mood');

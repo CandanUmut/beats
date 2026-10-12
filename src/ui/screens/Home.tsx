@@ -31,7 +31,7 @@ export function Home() {
         <HelpButton />
       </header>
 
-      <h1>{greeting()}<br /><em>How do you want to feel?</em></h1>
+      <h1>{greeting()} <em>How do you want to feel?</em></h1>
 
       {nudge.map((n) => (
         <div class="note accent-clay">
@@ -66,7 +66,7 @@ export function Home() {
       <div class="quick-row">
         <button onClick={() => go('/move')}><Icon name="walk" />Move</button>
         <button onClick={() => go('/sleep/diary')}><Icon name="moon" />Sleep log</button>
-        <button onClick={() => go('/evidence')}><Icon name="book" />Why it works</button>
+        <button onClick={() => go('/evidence')}><Icon name="book" />Research</button>
         <button onClick={() => go('/settings')}><Icon name="gear" />Settings</button>
       </div>
 

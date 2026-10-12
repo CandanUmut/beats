@@ -26,6 +26,8 @@ export interface Settings {
   /** The user's own version of each mood (from Fine-tune or the taste test). */
   recipes: Partial<Record<MoodId, Recipe>>;
   lastMood: MoodId | null;
+  /** How many times the "using headphones?" card has been shown. */
+  hpPrompts: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   visual: 'instrument',
   recipes: {},
   lastMood: null,
+  hpPrompts: 0,
 };
 
 export const settings = signal<Settings>(DEFAULT_SETTINGS);
