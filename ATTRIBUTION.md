@@ -39,3 +39,7 @@ Typesetter names for each file are on its Mutopia page (linked above).
 - Pink-noise filter coefficients: Paul Kellet's well-known "refined" method (public description).
 - Reverb structure follows the public Freeverb design (Jezar at Dreampoint); implementation written from scratch.
 - K-weighting filter formulas as published in ITU-R BS.1770 and used by libebur128; implementation written from scratch.
+
+## Fonts
+- **Fraunces** (Undercase Type), SIL Open Font License 1.1. `public/fonts/fraunces-*.woff2`, license in `public/fonts/OFL-Fraunces.txt`.
+- **Manrope** (Mikhail Sharanda), SIL Open Font License 1.1. `public/fonts/manrope-normal.woff2`, license in `public/fonts/OFL-Manrope.txt`.

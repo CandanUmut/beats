@@ -63,3 +63,11 @@ Expect the generative music to need a round or two of listening feedback from yo
 - Owner chose: classical from scores + real piano; beats on automatically except Calm down / Ride an urge; build everything at once.
 - This overrides the build prompt's "experimental layers off by default" for Relax, Sleep, Focus and Breathe. The UI still labels beats Experimental and says the evidence is weak.
 - Piano: FreePats Upright Piano KW small (CC0, 2.4 MB FLAC). Scores: Mutopia MIDI (public domain / CC BY-SA). Loudness per piece precomputed (`src/music/gains.json`, `tools/measure-gains.ts`).
+
+## Redesign (owner request: easier config, beats everywhere, followable breathing, cozy unique look, critic review)
+- Home is now "How do you want to feel?": six moods (Calm, Relaxed, Sleepy, Focused, Grounded, Brighter), each a full recipe in `src/data/moods.ts`.
+- "Find my sound" taste test (`src/ui/screens/Tuner.tsx`): music then beat, ~25 s per option, saved per mood.
+- Tune sheet in plain words; the user's version of each mood is remembered (`settings.recipes`).
+- Beat layer on in every mood, including Calm and Grounded (owner's choice). Session screens no longer repeat evidence caveats; the Research page keeps the full picture, including null results.
+- Breathing "tide" behind the instrument animation plus a countdown; the circle became a warm "lamp" with a countdown.
+- Visual identity: warm ink/cream/amber palette, Fraunces + Manrope (SIL OFL, self-hosted in public/fonts), paper grain.
