@@ -105,7 +105,7 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
             <Seg value={resolveBeatType(r.beat.type)} label="Listening on" onChange={(type) => setR({ ...r, beat: { ...r.beat, type } })} options={[{ v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speaker' }]} />
           </div>
           <div class="btn-row">
-            <button class="btn small" onClick={() => { setPreviewing(null); void demoBeat(r.beat.rate, r.beat.type === 'auto' ? resolveBeatType('auto') : r.beat.type, 'strong'); }}><Icon name="headphones" /> Hear it on its own</button>
+            <button class="btn small" onClick={() => { setPreviewing(null); void demoBeat(r.beat.rate, r.beat.type === 'auto' ? resolveBeatType('auto') : r.beat.type, 'strong'); }}><Icon name="headphones" /> On its own</button>
             <button class="btn small" onClick={() => void preview(r.sound, { ...r, beat: { ...r.beat, on: true } })}><Icon name="note" /> With my music</button>
           </div>
           <p class="tiny muted" style="margin-top:-4px">You'll hear the {resolveBeatType(r.beat.type) === 'binaural' ? 'headphone' : 'speaker'} version.</p>

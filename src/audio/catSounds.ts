@@ -32,13 +32,13 @@ export async function purr(seconds: number, volume: number): Promise<void> {
   src.buffer = buf;
   const filt = ac.createBiquadFilter();
   filt.type = 'lowpass';
-  filt.frequency.value = 320;
+  filt.frequency.value = 600; // enough upper rumble to come through phone speakers
   const env = ac.createGain();
   env.gain.setValueAtTime(0, t0);
   env.gain.linearRampToValueAtTime(1, t0 + 0.3);
   env.gain.setValueAtTime(1, t0 + len - 0.4);
   env.gain.linearRampToValueAtTime(0, t0 + len);
-  src.connect(filt).connect(env).connect(out(ac, 0.5 * volume));
+  src.connect(filt).connect(env).connect(out(ac, 1.2 * volume)); // ~6 LU under the music at the same volume
   src.start(t0);
   src.stop(t0 + len + 0.1);
 }

@@ -31,6 +31,8 @@ export interface Settings {
   /** The cat companion, and whether he makes sounds. */
   cat: boolean;
   catSounds: boolean;
+  /** Screens the cat has already shown you around (he does it once each). */
+  catGuided: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hpPrompts: 0,
   cat: true,
   catSounds: true,
+  catGuided: [],
 };
 
 export const settings = signal<Settings>(DEFAULT_SETTINGS);

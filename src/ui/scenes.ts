@@ -266,14 +266,18 @@ export function drawScene(c: Ctx, id: SceneId, W: number, H: number, f: SceneFra
         c.closePath();
         c.fillStyle = '#1a141c';
         c.fill();
-        c.globalAlpha = 0.45;
+        // Rim light on the sky-facing edge, kept inside the rock's outline.
+        c.save();
+        c.clip();
+        c.globalAlpha = 0.5;
         c.strokeStyle = '#e7b08a';
-        c.lineWidth = 1.5;
+        c.lineWidth = 3;
         c.beginPath();
-        c.moveTo(x0 + w * 0.08, H - h * 0.55);
+        c.moveTo(x0 + w * 0.06, H - h * 0.4);
         c.quadraticCurveTo(x0 + w * 0.2, H - h, x0 + w * 0.55, H - h * 0.92);
+        c.quadraticCurveTo(x0 + w * 0.75, H - h * 0.88, x0 + w * 0.82, H - h * 0.7);
         c.stroke();
-        c.globalAlpha = 1;
+        c.restore();
       };
       rock(W * 0.7, W * 0.32, H * 0.22);
       rock(W * 0.6, W * 0.12, H * 0.09);
@@ -306,19 +310,30 @@ export function drawScene(c: Ctx, id: SceneId, W: number, H: number, f: SceneFra
       c.restore();
       c.globalAlpha = 1;
       glow(c, W * 0.5, hor + (hor - sunY) * 0.6, H * 0.25, '#f8e8b4', 0.3);
-      // Ripples of varied length and brightness, drifting slowly.
+      // Ripples: longer, brighter and thicker toward you, drifting slowly.
       const rr = mulberry32(77);
-      for (let i = 0; i < 14; i++) {
-        const y = hor + 6 + rr() * (H - hor - 10);
-        const len = W * (0.05 + rr() * 0.18);
-        const x = ((rr() * W + t * (4 + rr() * 6)) % (W + len)) - len;
-        c.globalAlpha = 0.08 + rr() * 0.17;
-        c.strokeStyle = '#e6eed8';
-        c.lineWidth = 1;
+      c.strokeStyle = '#e6eed8';
+      for (let i = 0; i < 18; i++) {
+        const d = Math.pow(rr(), 1.4);
+        const y = hor + 4 + d * (H - hor - 8);
+        const len = W * (0.03 + d * 0.16) * (0.5 + rr());
+        const x = ((rr() * W + t * (3 + rr() * 5)) % (W + len)) - len;
+        c.globalAlpha = (0.05 + 0.22 * d) * (0.4 + 0.6 * rr());
+        c.lineWidth = 0.6 + 1.2 * d;
         c.beginPath();
         c.moveTo(x, y);
-        c.lineTo(x + len, y);
+        c.quadraticCurveTo(x + len / 2, y - 1 - d * 1.5, x + len, y);
         c.stroke();
+      }
+      // A path of glitter under the sun.
+      c.fillStyle = '#fbf0cc';
+      for (let i = 0; i < 12; i++) {
+        const d = (i + 0.5) / 12;
+        const y = hor + 3 + d * (H - hor - 6) * 0.8;
+        const tw = f.still ? 0.5 : 0.5 + 0.5 * Math.sin(t * (1.3 + i * 0.37) + i * 2.1);
+        c.globalAlpha = 0.08 + 0.25 * tw * (1 - d * 0.5);
+        const w = W * (0.015 + d * 0.05);
+        c.fillRect(W * 0.5 - w / 2 + Math.sin(i * 7.3) * W * 0.02 * (1 + d), y, w, 0.8 + d);
       }
       c.globalAlpha = 1;
       return;

@@ -316,7 +316,7 @@ export function Player(p: PlayerProps) {
             showPill={false}
             hint={recipe.breathing ? 'Press play, then <b>breathe with the light</b>: in as it rises, out as it falls.' : 'Press play. The keys follow the music.'}
             onSwitch={() => setTune('look')}
-            switchLabel="View"
+            switchLabel={<><Icon name="eye" size={14} /> View</>}
             onPart={(title, composer) => { const d = displayForPart(title); setNowPlaying(d ? { title: d.title, composer: d.sub } : { title, composer }); }}
           />
         ) : view === 'scene' ? (

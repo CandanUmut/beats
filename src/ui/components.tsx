@@ -1,5 +1,6 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { signal } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
 import { EVIDENCE_BY_ID, gradeLevel, type Grade } from '../data/evidence';
 import { go, back } from './router';
 import { regionById, DIRECTORY } from '../data/helplines';
@@ -123,7 +124,15 @@ export function HelpSheet() {
   );
 }
 
+let openSheets = 0;
+
 export function Sheet({ children, onClose }: { children: ComponentChildren; onClose: () => void }) {
+  // Lets the page (and the cat) know a sheet is up.
+  useEffect(() => {
+    openSheets++;
+    document.documentElement.classList.add('sheet-open');
+    return () => { if (--openSheets <= 0) { openSheets = 0; document.documentElement.classList.remove('sheet-open'); } };
+  }, []);
   return (
     <>
       <div class="sheet-backdrop" onClick={onClose} />

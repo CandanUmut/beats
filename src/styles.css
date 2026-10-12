@@ -578,7 +578,11 @@ h1 em { display: block; text-wrap: balance; }
 .taste-opt .letter { border: 0; cursor: pointer; color: inherit; }
 .taste-opt .letter svg { width: 16px; height: 16px; }
 .sticky-next { position: sticky; bottom: 0; margin: 8px calc(-1 * var(--pad)) 0; padding: 16px var(--pad) calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, var(--bg) 35%); }
-.with-cat .sticky-next { bottom: 80px; }
+.with-cat .sticky-next { padding-bottom: calc(16px + 80px + env(safe-area-inset-bottom)); }
+/* The sticky band already leaves room for the cat; no extra page padding under it. */
+.app.with-cat:has(.sticky-next) { padding-bottom: 0; }
+/* Fade in above the button and out again over the cat's floor, so no hard edge. */
+.with-cat .sticky-next { background: linear-gradient(180deg, transparent 0, color-mix(in srgb, var(--bg) 92%, transparent) 26px, color-mix(in srgb, var(--bg) 92%, transparent) calc(100% - 100px), transparent calc(100% - 20px)); }
 .scene-grid.big .scene-thumb { height: 92px; }
 
 /* The cat */
@@ -587,12 +591,17 @@ h1 em { display: block; text-wrap: balance; }
   position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); z-index: 30;
   height: 80px; max-width: 560px; margin: 0 auto;
   pointer-events: none;
+  transition: transform 0.35s ease, opacity 0.35s ease;
 }
+/* Out of the way while you scroll, and never over a sheet. */
+.cat-floor.ducked { transform: translateY(62%); opacity: 0.4; }
+.cat-floor.ducked .cat { pointer-events: none; }
+.sheet-open .cat-floor { display: none; }
 .cat-floor::before {
   content: ''; position: absolute; left: 4%; right: 4%; bottom: 6px; height: 10px; border-radius: 50%;
   background: radial-gradient(closest-side, rgba(0, 0, 0, 0.28), transparent);
 }
-.cat { position: absolute; left: 0; bottom: 4px; width: 96px; height: 72px; pointer-events: auto; cursor: pointer; touch-action: none; will-change: transform; }
+.cat { position: absolute; left: 0; bottom: 4px; width: 96px; height: 72px; padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; touch-action: pan-y; will-change: transform; -webkit-tap-highlight-color: transparent; }
 .cat svg { display: block; overflow: visible; }
 .cat:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
 .cat-bowl { position: absolute; bottom: 6px; width: 34px; height: 14px; pointer-events: none; }

@@ -8,6 +8,7 @@ import { allSessions, listenedHoursLast7Days, weeklyBudgetHours, type SessionRec
 import { allCheckIns, allDiary, saveDiary, hoursBetween, type CheckIn, type DiaryEntry } from '../../data/checkins';
 import { uid, db } from '../../data/db';
 import { GradeChip, Icon, Rating, Seg, Slider, Toggle, TopBar } from '../components';
+import { petTheCat } from '../Cat';
 import { VolumeCard } from '../Player';
 import { go } from '../router';
 import { UrgeChart } from './Flows';
@@ -171,8 +172,9 @@ export function Settings() {
       </div>
       <div class="card">
         <h3 style="margin-top:0">The cat</h3>
-        <Toggle label="Cat companion" hint="He wanders, naps, eats and shows you around. Tap to pet him." checked={s.cat} onChange={(cat) => updateSettings({ cat })} />
+        <Toggle label="Cat companion" hint="He wanders, naps, eats and shows you around the first time. Tap or stroke him to pet him." checked={s.cat} onChange={(cat) => updateSettings({ cat })} />
         <Toggle label="Cat sounds" hint="Soft purrs and the odd meow" checked={s.catSounds} onChange={(catSounds) => updateSettings({ catSounds })} />
+        {s.cat && <button class="btn small" onClick={petTheCat}>Pet the cat</button>}
       </div>
       <div class="card">
         <h3 style="margin-top:0">Visuals</h3>

@@ -2,6 +2,7 @@
 // glowing keys, or four strings that gently vibrate as the parts play.
 // Everything fades smoothly. Nothing flashes.
 
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import * as engine from '../audio/engine';
 import type { VisualNote } from '../music/score';
@@ -42,7 +43,7 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
   hint?: string | null;
   /** Switch to the lamp view. */
   onSwitch?: () => void;
-  switchLabel?: string;
+  switchLabel?: ComponentChildren;
   onPart?: (title: string, composer: string) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -329,9 +330,9 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
     }
     c.stroke();
     // Labels with a dark halo so the breath line never strikes them through.
-    c.globalAlpha = 0.85;
-    c.lineWidth = 4;
-    c.strokeStyle = 'rgba(20,18,16,.85)';
+    c.globalAlpha = 1;
+    c.lineWidth = 2;
+    c.strokeStyle = 'rgba(20,18,16,.6)';
     c.lineJoin = 'round';
     c.strokeText(STRING_NAMES[i], 10, y - gap * 0.3);
     c.fillStyle = 'rgba(239,230,216,0.7)';
