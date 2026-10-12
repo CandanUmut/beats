@@ -660,3 +660,16 @@ html.night-dim body::after { opacity: 0.84; }
 .now-playing { margin-top: 16px; }
 .control-row { margin: 16px 0 4px; }
 .set-head { font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 26px 4px 10px; }
+
+/* Round 7: session fits above the cat; labelled controls; aligned tiles */
+.in-session .instrument-canvas.scene, .in-session .instrument-canvas { height: min(40dvh, 380px); }
+.in-session .session-head { display: none; }
+.in-session .cat-floor { pointer-events: none; }
+.in-session .cat-floor .cat { pointer-events: none; }
+.ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; }
+.ctl .vol-btn { pointer-events: none; }
+.ctl-l { font-size: 12px; font-weight: 650; color: var(--muted); }
+.control-row .ctl:first-child { justify-self: start; }
+.mood > div:last-child { min-height: 0; display: block; }
+.mood .line { min-height: calc(13.5px * 1.35 * 2); }
+.canvas-hint.on-scene { top: 22%; left: 9%; right: 9%; padding: 0 6px; }

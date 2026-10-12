@@ -191,7 +191,7 @@ export function Cat() {
       const fw = floor.current?.clientWidth ?? 360;
       const session = inSession();
       // Into a session: knead, then curl up and breathe along. Out: stretch, slow blink.
-      if (session && !wasSession) { c.queue = [{ pose: 'curl' }]; begin(c, { pose: 'knead', dur: 2.6 }, sec); fly.current = null; }
+      if (session && !wasSession) { c.queue = [{ pose: 'knead', dur: 2.6 }, { pose: 'curl' }]; begin(c, { pose: 'walk', to: 6 }, sec); fly.current = null; }
       if (!session && wasSession) { c.queue = [{ pose: 'sit', dur: 4 }]; begin(c, { pose: 'stretch', dur: 2.6 }, sec); c.slowBlink = sec + 2.8; }
       wasSession = session;
       breath.current = session && sessionPattern ? breathAt(sessionPattern, engine.sessionTime()).level : 0.5;
@@ -509,23 +509,29 @@ export function CatBody({ pose, t, age, blink, look, breath, still }: {
   const twitch = Math.max(0, Math.sin(t * 0.7) - 0.97) * 30;
   switch (pose) {
     case 'walk': {
-      const ph = t * 9;
-      const leg = (x: number, p: number) => (
-        <g transform={`rotate(${Math.sin(ph + p) * 24} ${x + 3} 62)`}>
-          <rect x={x} y="60" width="6.5" height="22" rx="3.2" fill={F.fur} stroke={F.line} stroke-width="1" />
-        </g>
-      );
-      const bob = Math.abs(Math.sin(ph)) * 2;
+      const ph = t * 8;
+      const leg = (x: number, p: number, far: boolean) => {
+        const a = Math.sin(ph + p) * 20;
+        const lift = Math.max(0, Math.cos(ph + p)) * 2;
+        return (
+          <g transform={`rotate(${a} ${x + 3.2} 60)`} opacity={far ? 0.85 : 1}>
+            <rect x={x} y="58" width="6.6" height={24 - lift} rx="3.3" fill={far ? F.dark : F.fur} stroke={F.line} stroke-width="1" />
+            <ellipse cx={x + 3.3} cy={82 - lift} rx="4" ry="2.2" fill={F.cream} stroke={F.line} stroke-width="0.9" />
+          </g>
+        );
+      };
+      const bob = Math.abs(Math.sin(ph)) * 1.6;
+      const sw = Math.sin(t * 2.5) * 2;
       return (
         <g transform={`translate(0 ${-bob})`}>
-          {leg(36, Math.PI)}
-          {leg(66, 0)}
-          <Limb d={`M30 56 C 16 50 14 ${34 + Math.sin(t * 3) * 3} 22 ${26 + Math.sin(t * 3) * 3}`} w={7} />
-          <ellipse cx="52" cy="58" rx="28" ry="14" fill={F.fur} stroke={F.line} stroke-width="1.2" />
-          <path d="M40 46 q 4 4 0 9 M48 44.5 q 4 4 0 9 M56 44.5 q 4 4 0 9" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
-          <ellipse cx="60" cy="65" rx="15" ry="5" fill={F.cream} opacity="0.8" />
-          {leg(30, 0)}
-          {leg(60, Math.PI)}
+          {leg(31, 0, true)}
+          {leg(66, Math.PI, true)}
+          <Limb d={`M30 52 C 18 46 16 ${30 + sw} 24 ${24 + sw} C 28 ${20 + sw} 33 ${23 + sw} 31 ${28 + sw}`} w={7} />
+          <ellipse cx="52" cy="57" rx="28" ry="14" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <path d="M40 45 q 4 4 0 9 M48 43.5 q 4 4 0 9 M56 43.5 q 4 4 0 9" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+          <ellipse cx="60" cy="64" rx="15" ry="5" fill={F.cream} opacity="0.8" />
+          {leg(36, Math.PI, false)}
+          {leg(71, 0, false)}
           <Face x={86} y={38 + Math.sin(ph) * 1.2} eyes="open" look={[1, 0]} blink={blink} />
         </g>
       );
@@ -558,8 +564,17 @@ export function CatBody({ pose, t, age, blink, look, breath, still }: {
       return (<><LoafBody t={t} tail={0.4} /><Paw x={74} y={85} /><Paw x={84} y={85} /><Face x={90} y={64 + nod * 0.3} rot={30 + nod} eyes="closed" mouth="lick" /></>);
     }
     case 'groom': {
-      const lick = Math.sin(t * 7);
-      return (<><SitBody t={t} tail={0.5} /><FrontLegs raise={0.9 + lick * 0.08} /><Face x={65} y={33} rot={14 + lick * 4} eyes="closed" mouth="lick" /></>);
+      const lick = still ? 0 : Math.sin(t * 7);
+      return (
+        <>
+          <SitBody t={t} tail={0.5} />
+          <rect x="61" y="64" width="7" height="21" rx="3.4" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+          <Paw x={64.5} y={85} />
+          <Face x={63} y={35} rot={16 + lick * 3} eyes="closed" mouth="lick" />
+          <Limb d={`M72 66 C 76 58 ${74 + lick} 50 ${70 + lick} 46`} w={6.6} />
+          <ellipse cx={69.5 + lick} cy={44.5} rx="4.2" ry="3.4" fill={F.cream} stroke={F.line} stroke-width="1" />
+        </>
+      );
     }
     case 'stretch': {
       const k = Math.sin(Math.min(1, age / 2.5) * Math.PI);
@@ -572,7 +587,8 @@ export function CatBody({ pose, t, age, blink, look, breath, still }: {
           <rect x="39" y="66" width="7" height="20" rx="3.4" fill={F.fur} stroke={F.line} stroke-width="1.1" />
           <Limb d={`M74 80 L ${96 + k * 6} 84`} w={6.5} />
           <Paw x={98 + k * 6} y={86} />
-          <Face x={88} y={64 + k * 6} rot={8} eyes={k > 0.4 ? 'closed' : 'half'} mouth={k > 0.6 ? 'open' : 'smile'} open={k > 0.6 ? 0.45 : 0} blink={blink} />
+          <Paw x={88} y={86} />
+          <Face x={88} y={62 + k * 6} rot={8} eyes={k > 0.4 ? 'closed' : 'half'} mouth="smile" blink={blink} />
         </g>
       );
     }
@@ -590,6 +606,7 @@ export function CatBody({ pose, t, age, blink, look, breath, still }: {
         <g>
           <Limb d={`M32 ${60 + wig} C 18 ${56 + wig} 12 ${46 - wig} ${16 + wig * 2} 38`} w={6.5} />
           <path d={`M28 84 C 22 ${70 + wig} 26 ${56 + wig} 40 ${55 + wig} C 56 56 70 64 82 71 C 89 76 87 84 80 84 Z`} fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <ellipse cx="35" cy={72 + wig * 0.5} rx="11" ry="12" fill={F.fur} stroke={F.line} stroke-width="1.1" />
           <path d="M40 59 q 4 4 0 8 M48 60 q 4 4 0 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
           <Paw x={78} y={85} /><Paw x={88} y={85} />
           <Face x={88} y={62} eyes="wide" look={look} mouth="none" />
@@ -599,30 +616,40 @@ export function CatBody({ pose, t, age, blink, look, breath, still }: {
     case 'pounce': {
       const k = Math.sin(Math.min(1, age / 0.7) * Math.PI);
       return (
-        <g transform={`translate(0 ${-k * 26})`}>
-          <Limb d="M30 58 C 18 60 10 56 4 60" w={7} />
-          <ellipse cx="52" cy="58" rx="28" ry="12" fill={F.fur} stroke={F.line} stroke-width="1.2" />
-          <path d="M42 48 q 4 4 0 8 M50 47 q 4 4 0 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
-          <Limb d="M70 60 L 90 54" w={6} />
-          <Limb d="M70 64 L 92 62" w={6} />
-          <Limb d="M34 64 L 18 72" w={6} />
-          <Face x={84} y={44} eyes="wide" look={[1, -1]} mouth="open" open={0.35} />
+        <g transform={`translate(0 ${-k * 26}) rotate(${-14 * k} 56 60)`}>
+          <Limb d="M30 54 C 18 44 16 30 24 22" w={7} />
+          <Limb d="M36 64 L 22 76" w={6.5} />
+          <Limb d="M44 66 L 32 80" w={6.5} />
+          <ellipse cx="54" cy="58" rx="27" ry="13" fill={F.fur} stroke={F.line} stroke-width="1.2" />
+          <ellipse cx="36" cy="60" rx="11" ry="11" fill={F.fur} stroke={F.line} stroke-width="1.1" />
+          <path d="M44 47 q 4 4 0 8 M52 46 q 4 4 0 8" stroke={F.dark} stroke-width="2.2" fill="none" stroke-linecap="round" />
+          <Limb d="M70 62 C 80 60 88 56 96 52" w={6.2} />
+          <Limb d="M72 66 C 82 64 90 60 98 57" w={6.2} />
+          <Paw x={97} y={53} /><Paw x={99} y={58} />
+          <Face x={82} y={44} eyes="wide" look={[1, -1]} mouth="none" />
         </g>
       );
     }
     case 'roll': {
       const kick = still ? 0 : Math.sin(t * 5);
-      return (
+      const wig = still ? 0 : Math.sin(t * 3) * 2;
+      const pawUp = (x0: number, x1: number, p: number) => (
         <>
-          <Limb d="M28 82 C 16 84 12 76 18 70" w={6.5} />
+          <Limb d={`M${x0} 68 Q ${x0 + p} 56 ${x1} 56`} w={6} />
+          <ellipse cx={x1} cy={57} rx="3.6" ry="3" fill={F.cream} stroke={F.line} stroke-width="0.9" />
+        </>
+      );
+      return (
+        <g transform={`rotate(${wig} 58 80)`}>
+          <Limb d="M30 80 C 16 84 10 72 18 66 C 22 63 26 66 24 70" w={6.5} />
           <ellipse cx="56" cy="76" rx="29" ry="11.5" fill={F.fur} stroke={F.line} stroke-width="1.2" />
           <ellipse cx="56" cy="72" rx="19" ry="6.5" fill={F.cream} />
-          <Limb d={`M42 68 L ${38 + kick * 2} 56`} w={6} />
-          <Limb d={`M50 67 L ${50 - kick * 2} 55`} w={6} />
-          <Limb d={`M62 67 L ${64 + kick * 2} 55`} w={6} />
-          <Limb d={`M70 68 L ${74 - kick * 2} 57`} w={6} />
-          <Face x={89} y={63} rot={160} eyes="happy" />
-        </>
+          {pawUp(42, 44 + kick, -6)}
+          {pawUp(50, 52 - kick, -4)}
+          {pawUp(62, 64 + kick, 4)}
+          {pawUp(70, 73 - kick, 6)}
+          <Face x={88} y={66} rot={-28} eyes="happy" />
+        </g>
       );
     }
     case 'sit':

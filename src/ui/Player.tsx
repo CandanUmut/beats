@@ -177,7 +177,8 @@ export function Player(p: PlayerProps) {
   const sceneId: SceneId = recipe.scene ?? 'forest';
   const sceneHint = SCENES.find((x) => x.id === sceneId)?.hint ?? 'in as it rises, out as it falls';
   // The slim keys/strings strip under a painting, when the music has notes.
-  const strip: 'piano' | 'strings' | null = view === 'scene' && s.musicStrip && hasNotes(sound) ? (sound === 'strings' ? 'strings' : 'piano') : null;
+  const stripKind = SOUND_BY_ID[sound]?.visual;
+  const strip: 'piano' | 'strings' | null = view === 'scene' && s.musicStrip && hasNotes(sound) && (stripKind === 'piano' || stripKind === 'strings') ? stripKind : null;
 
   function setRecipe(r: Recipe) {
     setRecipeState(r);
@@ -319,7 +320,7 @@ export function Player(p: PlayerProps) {
 
   const beatType = resolveBeatType(recipe.beat.type);
   const h = s.headphones;
-  const askHeadphones = recipe.beat.on && recipe.beat.type === 'auto' && h.lr === null && !h.at && s.hpPrompts < 2;
+  const askHeadphones = p.moodId !== 'calm' && p.moodId !== 'grounded' && recipe.beat.on && recipe.beat.type === 'auto' && h.lr === null && !h.at && s.hpPrompts < 2;
   useEffect(() => {
     if (askHeadphones) updateSettings({ hpPrompts: settings.value.hpPrompts + 1 });
   }, []);
@@ -343,7 +344,7 @@ export function Player(p: PlayerProps) {
         ) : view === 'scene' ? (
           <div class={`scene-frame${strip ? ' with-strip' : ''}`}>
             <SceneView scene={sceneId} playing={playing} breathing={recipe.breathing} pattern={pattern} hint={recipe.breathing ? `Press play, then breathe <b>${sceneHint}</b>.` : null}>
-              <button class="view-pill" onClick={() => setTune('look')}><Icon name="eye" size={14} /> Scene</button>
+              <button class="view-pill" onClick={() => setTune('look')}><Icon name="eye" size={14} /> View</button>
             </SceneView>
             {strip && <MusicStrip kind={strip} timeline={timeline} playing={playing} onOpen={() => setRecipe({ ...recipe, visual: strip })} />}
           </div>
@@ -368,7 +369,7 @@ export function Player(p: PlayerProps) {
       </div>
 
       <div class="control-row">
-        <button class="vol-btn" aria-label="Tune: volume, music, breathing, beat" onClick={() => setTune('music')}><Icon name="sliders" /></button>
+        <button class="ctl" aria-label="Tune: volume, music, breathing, beat" onClick={() => setTune('music')}><span class="vol-btn"><Icon name="sliders" /></span><span class="ctl-l">Tune</span></button>
         {!running ? (
           <button class="play-btn" onClick={start} disabled={!!busy} aria-label="Start">
             <Icon name="play" />
@@ -378,7 +379,7 @@ export function Player(p: PlayerProps) {
             <Icon name="stop" />
           </button>
         )}
-        <button class="vol-btn" style="justify-self:end" onClick={() => setTune('length')} aria-label={`Length: ${minutes} minutes`}><Icon name="clock" /></button>
+        <button class="ctl" style="justify-self:end" onClick={() => setTune('length')} aria-label={`Length: ${minutes} minutes`}><span class="vol-btn"><Icon name="clock" /></span><span class="ctl-l">Length</span></button>
       </div>
       <p class="time-line">{running ? `${fmtTime(remaining)} left` : `${minutes} min`}</p>
       {busy && <p class="center muted small">{busy}</p>}
@@ -421,8 +422,8 @@ export function Player(p: PlayerProps) {
 
       <input ref={fileInput} type="file" accept="audio/*" hidden onChange={onFile} />
 
-      {engine.isIOS() && (
-        <p class="tiny faint">On iPhone and iPad, sound can stop when the screen locks. For long or overnight sessions, use "Save as file" in Tune and play it in a music app.</p>
+      {engine.lockMayStopSound() && (
+        <p class="tiny faint">On this iPhone or iPad version, sound may stop when the screen locks. Updating to iOS 17.5 or newer fixes it; or use "Save as file" in Tune and play it in a music app.</p>
       )}
 
       {tune && (

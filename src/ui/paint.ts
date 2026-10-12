@@ -65,9 +65,9 @@ export function sky(c: Ctx, W: number, horizon: number, stops: [number, string][
     const y = Math.pow(r(), 0.8) * horizon * 0.95;
     const w = W * (0.25 + r() * 0.6);
     const x = r() * W;
-    c.fillStyle = rgba(streak, 0.035 + r() * 0.05);
+    c.fillStyle = rgba(streak, 0.025 + r() * 0.035);
     c.beginPath();
-    c.ellipse(x, y, w / 2, 1.5 + r() * 3.5, 0, 0, Math.PI * 2);
+    c.ellipse(x, y, w / 2, horizon * (0.008 + r() * 0.02), 0, 0, Math.PI * 2);
     c.fill();
   }
 }
@@ -166,27 +166,19 @@ export function mountain(c: Ctx, cx: number, peakY: number, baseY: number, w: nu
   c.closePath();
   c.fillStyle = vgrad(c, peakY, baseY, [[0, col.snow], [snowLine * 0.8, col.snow], [snowLine, col.lit], [1, col.lit]]);
   c.fill();
-  // Knife strokes: dark breaks running down and out across the lit face.
-  c.strokeStyle = rgba(col.base, 0.6);
+  // A few soft breaks across the lit face, so it reads as ridges, not a flat plane.
   c.lineCap = 'round';
-  for (let k = 0; k < 12; k++) {
-    const p = spine[Math.floor(r() * spine.length * 0.9)];
-    const len = h * (0.06 + r() * 0.16);
-    c.lineWidth = 0.8 + r() * 2.2;
+  for (let k = 0; k < 6; k++) {
+    const p = spine[Math.floor((0.15 + r() * 0.6) * spine.length)];
+    const len = h * (0.1 + r() * 0.14);
+    const g = c.createLinearGradient(p[0], p[1], p[0] - dir * len, p[1] + len);
+    g.addColorStop(0, rgba(col.base, 0.35));
+    g.addColorStop(1, rgba(col.base, 0));
+    c.strokeStyle = g;
+    c.lineWidth = 2 + r() * 3;
     c.beginPath();
-    c.moveTo(p[0] - dir * r() * w * 0.04, p[1]);
-    c.lineTo(p[0] - dir * len * (0.6 + r() * 0.6), p[1] + len);
-    c.stroke();
-  }
-  // A little snow in the shadow too.
-  c.strokeStyle = rgba(mix(col.snow, col.base, 0.55), 0.7);
-  for (let k = 0; k < 10; k++) {
-    const p = spine[Math.floor(r() * spine.length * 0.6)];
-    const len = h * (0.04 + r() * 0.1);
-    c.lineWidth = 0.8 + r() * 1.6;
-    c.beginPath();
-    c.moveTo(p[0] + dir * 2, p[1]);
-    c.lineTo(p[0] + dir * len * (0.8 + r()), p[1] + len * 0.9);
+    c.moveTo(p[0] - dir * 2, p[1]);
+    c.lineTo(p[0] - dir * len * (0.7 + r() * 0.5), p[1] + len);
     c.stroke();
   }
   // Mist at the foot.

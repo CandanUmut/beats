@@ -2,7 +2,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { EVIDENCE_BY_ID, gradeLevel, type Grade } from '../data/evidence';
-import { go, back, isDeep } from './router';
+import { go, back, isDeep, route } from './router';
 import { regionById, DIRECTORY } from '../data/helplines';
 import { settings } from '../data/settings';
 import { CRISIS } from '../data/safety';
@@ -63,7 +63,7 @@ export function TopBar({ title, onBack, right }: { title?: string; onBack?: () =
         <Icon name="back" />
       </button>
       <div class="title">{title}</div>
-      {isDeep() && (
+      {isDeep() && !route.value.startsWith('/m/') && (
         <button class="icon-btn" aria-label="Home" onClick={() => go('/')}>
           <Icon name="home" />
         </button>

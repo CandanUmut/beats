@@ -65,7 +65,7 @@ function composite(W: number, H: number, dpr: number, parts: HTMLCanvasElement[]
 
 // --- Palm trees -------------------------------------------------------------
 
-function palm(c: Ctx, x: number, base: number, h: number, lean: number, sway: number, seed: number) {
+export function palm(c: Ctx, x: number, base: number, h: number, lean: number, sway: number, seed: number) {
   const r = mulberry32(seed);
   const px = (u: number) => x + lean * h * u + Math.sin(u * Math.PI) * lean * h * 0.22 + sway * h * u * u * 0.4;
   const py = (u: number) => base - h * u;
@@ -114,7 +114,7 @@ function palm(c: Ctx, x: number, base: number, h: number, lean: number, sway: nu
     ];
     for (const pass of [0, 1]) {
       c.strokeStyle = pass ? '#7fa55e' : '#2f5236';
-      c.lineWidth = pass ? 1.1 : 1.8;
+      c.lineWidth = pass ? Math.max(1.1, h * 0.005) : Math.max(1.8, h * 0.009);
       c.beginPath();
       for (let s = 0.1; s <= 1; s += 0.055) {
         const [x0, y0] = at(s), [x1, y1] = at(Math.min(1, s + 0.02));
@@ -129,7 +129,7 @@ function palm(c: Ctx, x: number, base: number, h: number, lean: number, sway: nu
       c.stroke();
     }
     c.strokeStyle = '#3d5a34';
-    c.lineWidth = 1.4;
+    c.lineWidth = Math.max(1.4, h * 0.007);
     c.beginPath();
     c.moveTo(tx, ty);
     c.quadraticCurveTo(cx, cy, ex, ey);
@@ -231,9 +231,9 @@ const beach: Painting = {
       c.fillRect(W * 0.76 - w / 2 + Math.sin(t * 0.5 + i) * 3, y, w, 1.4);
     }
     // The wash: in as it runs up the sand (toward you), out as it slides back.
-    const edgeY = sh + H * (0.03 + 0.22 * b);
+    const edgeY = sh + H * (0.02 + 0.26 * b);
     const edge = (x: number) => edgeY + Math.sin((x / W) * 7 + t * 0.4) * H * 0.008 + Math.sin((x / W) * 17 - t * 0.3) * H * 0.004;
-    const full = sh + H * 0.25;
+    const full = sh + H * 0.29;
     // Wet sand left behind.
     c.beginPath();
     c.moveTo(0, sh);
@@ -247,7 +247,7 @@ const beach: Painting = {
     for (let x = 0; x <= W; x += 6) c.lineTo(x, edge(x));
     c.lineTo(W, sh - 1);
     c.closePath();
-    c.fillStyle = vgrad(c, sh, edgeY + 6, [[0, 'rgba(127,184,184,0.95)'], [0.6, 'rgba(160,212,200,0.75)'], [1, 'rgba(200,232,222,0.45)']]);
+    c.fillStyle = vgrad(c, sh, edgeY + 6, [[0, 'rgba(127,184,184,0.75)'], [0.35, 'rgba(160,212,200,0.4)'], [1, 'rgba(210,236,226,0.22)']]);
     c.fill();
     // Foam: a bright edge with lace behind it.
     c.strokeStyle = 'rgba(255,253,246,0.92)';
@@ -265,8 +265,8 @@ const beach: Painting = {
     }
     // Palms sway gently.
     const sway = Math.sin(t * 0.35) * 0.04 + Math.sin(t * 0.9) * 0.01;
-    palm(c, W * 0.08, H * 1.02, H * 0.7, 0.2, sway, 3);
-    palm(c, W * 0.22, H * 1.0, H * 0.46, 0.12, sway * 0.8, 4);
+    palm(c, W * 0.05, H * 1.03, H * 0.66, 0.2, sway, 3);
+    palm(c, W * 0.97, H * 1.02, H * 0.42, -0.16, sway * 0.8, 4);
     img(c, L.front, W, H);
   },
 };
@@ -367,23 +367,23 @@ const ocean: Painting = {
       c.lineTo(W + 2, H);
       c.closePath();
       c.fill();
+      // Soft lit planes on the sunward face instead of hatching.
       c.save();
       c.clip();
-      c.strokeStyle = 'rgba(214,142,112,0.55)';
-      c.lineCap = 'round';
-      for (let i = 0; i < 26; i++) {
-        const y = top + r() * (H - top) * 0.8;
-        const x = W * 0.7 + r() * W * 0.12 + (y - top) * -0.08;
-        c.lineWidth = 0.8 + r() * 2;
+      for (const [x0, y0, x1, y1, a] of [[0.72, 0.58, 0.8, 0.46, 0.22], [0.69, 0.8, 0.76, 0.62, 0.16], [0.82, 0.44, 0.87, 0.41, 0.25]]) {
+        c.fillStyle = `rgba(214,142,112,${a})`;
         c.beginPath();
-        c.moveTo(x, y);
-        c.lineTo(x + 6 + r() * 12, y + 4 + r() * 10);
-        c.stroke();
+        c.moveTo(W * x0, H * y0);
+        c.lineTo(W * x1, H * y1);
+        c.lineTo(W * (x1 + 0.04), H * (y1 + 0.03));
+        c.lineTo(W * (x0 + 0.05), H * (y0 + 0.08));
+        c.closePath();
+        c.fill();
       }
       c.restore();
       grass(c, W * 0.8, W, top + 2, H * 0.03, ['#2f3a30', '#55604a'], r, 1.6);
       // Lighthouse.
-      const lx = W * 0.9, lb = top - H * 0.005, lh = H * 0.2, lw = Math.max(8, W * 0.035);
+      const lx = W * 0.92, lb = top - H * 0.005, lh = H * 0.2, lw = Math.max(8, W * 0.035);
       c.fillStyle = '#efe2d2';
       c.beginPath();
       c.moveTo(lx - lw / 2, lb);
@@ -405,18 +405,6 @@ const ocean: Painting = {
       c.lineTo(lx, lb - lh - lw * 1.05);
       c.lineTo(lx + lw * 0.45, lb - lh - lw * 0.62);
       c.fill();
-      // Rocks at the foot.
-      for (const [rx, rw, rh] of [[0.6, 0.1, 0.05], [0.69, 0.06, 0.03]]) {
-        c.fillStyle = '#231b29';
-        c.beginPath();
-        c.ellipse(W * rx, H, W * rw, H * rh, 0, Math.PI, 0);
-        c.fill();
-        c.strokeStyle = 'rgba(214,142,112,0.5)';
-        c.lineWidth = 1.5;
-        c.beginPath();
-        c.ellipse(W * rx, H, W * rw, H * rh, 0, Math.PI * 1.1, Math.PI * 1.5);
-        c.stroke();
-      }
       finish(c, W, H);
     });
     return { back, cl, front };
@@ -441,22 +429,24 @@ const ocean: Painting = {
     c.closePath();
     c.fillStyle = 'rgba(70,62,92,0.55)';
     c.fill();
-    const base = H * (0.9 - 0.27 * b);
+    const base = H * (0.8 - 0.25 * b);
     const swell = (x: number) => base + Math.sin(x / W * 5 + t * 0.45) * H * 0.018 + Math.sin(x / W * 11 - t * 0.3) * H * 0.006;
     c.beginPath();
     c.moveTo(0, H);
     for (let x = 0; x <= W; x += 5) c.lineTo(x, swell(x));
     c.lineTo(W, H);
     c.closePath();
-    c.fillStyle = vgrad(c, base - H * 0.05, H, [[0, '#4a4366'], [1, '#1f1f33']]);
+    c.fillStyle = vgrad(c, base - H * 0.03, H, [[0, '#7a6488'], [0.12, '#56496e'], [1, '#232239']]);
     c.fill();
-    c.strokeStyle = 'rgba(246,190,150,0.7)';
-    c.lineWidth = 2;
+    // Light catching the crest, and a little foam under the boat.
     c.beginPath();
-    for (let x = 0; x <= W; x += 5) (x ? c.lineTo(x, swell(x) + 1) : c.moveTo(x, swell(x) + 1));
+    for (let x = 0; x <= W; x += 5) (x ? c.lineTo(x, swell(x) + 1.5) : c.moveTo(x, swell(x) + 1.5));
+    c.strokeStyle = 'rgba(246,196,160,0.28)';
+    c.lineWidth = 4;
     c.stroke();
     const bx = W * 0.42;
     const slope = (swell(bx + 4) - swell(bx - 4)) / 8;
+    soft(c, bx, swell(bx) + 2, Math.min(W, H) * 0.09, '#fbe8d8', 0.35);
     boat(c, bx, swell(bx) - 2, Math.min(W, H) * 0.14, Math.atan(slope) * 0.9);
     img(c, L.front, W, H);
   },
@@ -560,7 +550,7 @@ const lake: Painting = {
     const [cx, cy] = chimney.lake;
     smoke(c, cx * W, cy * H, W * 0.06, t, '#eef0ea');
     const s = Math.min(W, H) * 0.13;
-    const bx = W * (0.34 + 0.08 * Math.sin(t * 0.012));
+    const bx = W * (0.5 + 0.07 * Math.sin(t * 0.012));
     const by = H * (0.52 - 0.34 * b);
     const flame = f.inhale && f.breathing ? 0.8 + 0.2 * Math.sin(t * 9) : 0;
     // Reflection in the lake.
@@ -568,7 +558,7 @@ const lake: Painting = {
     c.beginPath();
     c.rect(0, wl, W, H - wl);
     c.clip();
-    c.globalAlpha = 0.28;
+    c.globalAlpha = 0.2;
     c.translate(0, wl * 2);
     c.scale(1, -1);
     balloon(c, bx, by, s, 0);
@@ -651,17 +641,20 @@ const forest: Painting = {
   frame(c, L, W, H, f, b) {
     const t = f.t;
     img(c, L.back, W, H);
-    // The mist bank between the trees: in as it rises, out as it settles.
-    const top = H * (0.8 - 0.36 * b);
-    const edge = (x: number) => top + Math.sin(x / W * 5 + t * 0.15) * H * 0.02 + Math.sin(x / W * 13 - t * 0.1) * H * 0.008;
+    // A bank of mist climbing the middle trees: in as it rises, out as it settles.
+    const bottom = H * (0.86 - 0.36 * b), top = bottom - H * 0.25;
+    const edge = (x: number) => top + Math.sin(x / W * 5 + t * 0.15) * H * 0.018 + Math.sin(x / W * 13 - t * 0.1) * H * 0.007;
     c.beginPath();
-    c.moveTo(0, H);
+    c.moveTo(0, bottom + H * 0.06);
     for (let x = 0; x <= W; x += 6) c.lineTo(x, edge(x));
-    c.lineTo(W, H);
+    c.lineTo(W, bottom + H * 0.06);
     c.closePath();
-    c.fillStyle = vgrad(c, top - H * 0.03, top + H * 0.22, [[0, 'rgba(244,243,230,0)'], [0.35, 'rgba(244,243,230,0.55)'], [1, 'rgba(244,243,230,0.82)']]);
+    c.fillStyle = vgrad(c, top - H * 0.02, bottom + H * 0.06, [[0, 'rgba(248,247,236,0)'], [0.18, 'rgba(248,247,236,0.7)'], [0.6, 'rgba(244,243,230,0.6)'], [1, 'rgba(244,243,230,0)']]);
     c.fill();
-    for (let i = 0; i < 5; i++) soft(c, ((i * 0.27 + t * 0.004) % 1.2) * W - W * 0.1, edge(W * i * 0.2) + H * 0.02, W * 0.18, '#f6f5ea', 0.35);
+    for (let i = 0; i < 5; i++) soft(c, ((i * 0.27 + t * 0.004) % 1.2) * W - W * 0.1, top + H * 0.08, W * 0.16, '#f8f7ee', 0.3);
+    // Low ground mist always lingers.
+    c.fillStyle = vgrad(c, H * 0.78, H * 0.9, [[0, 'rgba(244,243,230,0)'], [1, 'rgba(244,243,230,0.45)']]);
+    c.fillRect(0, H * 0.78, W, H * 0.12);
     img(c, L.front, W, H);
     const [cx, cy] = chimney.forest;
     smoke(c, cx * W, cy * H, W * 0.08, t, '#eef0ea');
@@ -677,24 +670,27 @@ const forest: Painting = {
 // --- Night: the northern lights grow and fade ------------------------------
 
 function aurora(c: Ctx, W: number, H: number, baseY: number, t: number, b: number, alpha: number) {
-  // A curtain: many thin columns whose foot follows a slow, folding ribbon.
-  // Each column is bright at the foot and fades upward into violet.
+  // Three or four ribbons of light (soft bumps along the width) whose foot
+  // follows a slow fold. They grow taller and brighter as you breathe in.
   const n = 150;
   const prev = c.globalCompositeOperation;
   c.globalCompositeOperation = 'lighter';
   const cw = (W / n) * 2.4;
+  const ribbons = [0.18, 0.42, 0.63, 0.85].map((x0, i) => x0 + 0.04 * Math.sin(t * 0.03 + i * 2));
   for (let i = 0; i < n; i++) {
     const u = i / n;
+    let env = 0;
+    for (const r of ribbons) env = Math.max(env, Math.exp(-Math.pow((u - r) / 0.07, 2)));
+    env = 0.12 + 0.88 * env;
     const fold = Math.sin(u * 9 + t * 0.06) * 0.5 + Math.sin(u * 23 - t * 0.04) * 0.25;
-    const x = W * u + fold * W * 0.015;
-    const env = 0.3 + 0.7 * Math.pow(0.5 + 0.5 * Math.sin(u * 5.2 + 0.8 + t * 0.02), 1.5);
-    const h = H * (0.07 + 0.36 * b) * (0.55 + 0.45 * env);
-    const y0 = baseY - H * 0.07 * Math.sin(u * Math.PI * 1.7 + 0.6 + t * 0.03) - fold * H * 0.015;
-    const a = alpha * env * (0.5 + 0.5 * b) * (0.85 + 0.15 * Math.sin(u * 13 + t * 0.2));
+    const x = W * u + fold * W * 0.012;
+    const h = H * 0.42 * (0.4 + 0.6 * b) * (0.45 + 0.55 * env);
+    const y0 = baseY - H * 0.05 * Math.sin(u * Math.PI * 1.7 + 0.6 + t * 0.03) - fold * H * 0.012;
+    const a = alpha * (0.15 + 0.6 * b) * env;
     const g = c.createLinearGradient(0, y0, 0, y0 - h);
-    g.addColorStop(0, `rgba(120,240,180,${a})`);
-    g.addColorStop(0.12, `rgba(100,225,175,${a * 0.85})`);
-    g.addColorStop(0.6, `rgba(80,180,190,${a * 0.35})`);
+    g.addColorStop(0, `rgba(130,245,185,${a})`);
+    g.addColorStop(0.15, `rgba(100,230,175,${a * 0.85})`);
+    g.addColorStop(0.6, `rgba(80,185,195,${a * 0.4})`);
     g.addColorStop(1, 'rgba(150,110,210,0)');
     c.fillStyle = g;
     c.fillRect(x, y0 - h, cw, h + 2);
@@ -707,7 +703,7 @@ const night: Painting = {
     const wl = H * 0.66;
     const skyL = layer(W, H, dpr, (c) => {
       const r = mulberry32(71);
-      sky(c, W, wl, [[0, '#0b1024'], [0.55, '#18243f'], [1, '#2a3b55']], '#6b7fa8', r);
+      sky(c, W, wl, [[0, '#0b1024'], [0.55, '#18243f'], [1, '#2a3b55']], '#26344f', r);
       c.fillStyle = '#f3ebdf';
       for (let i = 0; i < 150; i++) {
         c.globalAlpha = 0.3 + r() * 0.6;
@@ -776,7 +772,7 @@ const night: Painting = {
       c.fillRect(x, y, 1.4, 1.4);
     }
     c.globalAlpha = 1;
-    aurora(c, W, H, H * 0.5, t, b, 0.3);
+    aurora(c, W, H, H * 0.52, t, b, 0.55);
     img(c, L.land, W, H);
     img(c, L.water, W, H);
     c.save();
@@ -785,7 +781,7 @@ const night: Painting = {
     c.clip();
     c.translate(0, wl * 2);
     c.scale(1, -1);
-    aurora(c, W, H, H * 0.5, t, b, 0.14);
+    aurora(c, W, H, H * 0.52, t, b, 0.18);
     c.restore();
     img(c, L.front, W, H);
     // The campfire, glowing softly.
@@ -910,7 +906,11 @@ const meadow: Painting = {
       leafyTree(c, fx - fs * 0.8, fy, fs * 2.2, ['#4d7444', '#76a05c', '#c5d98d'], '#5a4030', r);
       for (let i = 0; i < 6; i++) bush(c, W * (0.05 + i * 0.09), mid(W * (0.05 + i * 0.09)) + 3, W * 0.05, H * 0.025, ['#5f8a4f', '#7ea862', '#c3d88c'], r);
       const near = hills(c, W, H, H * 0.8, H * 0.1, 0.9, 4, '#6f9a58', '#d1df92', r);
-      flowers(c, 0, W, H * 0.78, H, ['#f4efe2', '#f2cc8f', '#e8a0a0', '#c9b6e4'], 120, r);
+      // Wildflowers in little clumps.
+      for (let k = 0; k < 16; k++) {
+        const cx = r() * W, cy = H * (0.8 + r() * 0.18);
+        flowers(c, cx - W * 0.04, cx + W * 0.04, cy - H * 0.012, cy + H * 0.012, [['#f4efe2', '#f2cc8f', '#e8a0a0', '#c9b6e4'][k % 4], '#f4efe2'], 9, r);
+      }
       leafyTree(c, W * 0.86, near(W * 0.86) + 6, H * 0.46, ['#3e6b3f', '#6a9a55', '#b9d27c'], '#5a4030', r);
       // A fence along the near hill.
       c.strokeStyle = '#7a5d44';
@@ -933,7 +933,10 @@ const meadow: Painting = {
           c.stroke();
         }
       }
-      fence.meadow = [W * 0.12 / W, (near(W * 0.12) + H * 0.01) / H];
+      // A little ginger cat sits by the fence, holding the kite string.
+      const kx = W * 0.2, ky = near(W * 0.2) + H * 0.08, ks = Math.min(W, H) * 0.1;
+      tinyCat(c, kx, ky, ks);
+      fence.meadow = [(kx + ks * 0.42) / W, (ky - ks * 0.62) / H];
       finish(c, W, H);
     });
     return { skyL, cl, land };
@@ -963,6 +966,47 @@ const meadow: Painting = {
 };
 
 const fence: Record<string, [number, number]> = { meadow: [0.12, 0.85] };
+
+/** A tiny sitting cat, seen from behind and a little to the side, looking up. */
+function tinyCat(c: Ctx, x: number, y: number, s: number) {
+  c.lineCap = 'round';
+  c.strokeStyle = '#c9793d';
+  c.lineWidth = s * 0.12;
+  c.beginPath();
+  c.moveTo(x - s * 0.25, y - s * 0.05);
+  c.quadraticCurveTo(x - s * 0.7, y, x - s * 0.62, y - s * 0.4);
+  c.stroke();
+  c.fillStyle = '#eba667';
+  c.beginPath();
+  c.ellipse(x, y - s * 0.32, s * 0.32, s * 0.36, 0, 0, Math.PI * 2);
+  c.fill();
+  c.beginPath();
+  c.arc(x + s * 0.08, y - s * 0.78, s * 0.24, 0, Math.PI * 2);
+  c.fill();
+  for (const dx of [-0.1, 0.24]) {
+    c.beginPath();
+    c.moveTo(x + s * (dx - 0.1), y - s * 0.9);
+    c.lineTo(x + s * (dx - 0.02), y - s * 1.1);
+    c.lineTo(x + s * (dx + 0.08), y - s * 0.92);
+    c.closePath();
+    c.fill();
+  }
+  c.strokeStyle = '#c9793d';
+  c.lineWidth = s * 0.05;
+  c.beginPath();
+  c.moveTo(x - s * 0.18, y - s * 0.5);
+  c.quadraticCurveTo(x - s * 0.1, y - s * 0.42, x - s * 0.16, y - s * 0.32);
+  c.moveTo(x - s * 0.08, y - s * 0.56);
+  c.quadraticCurveTo(x, y - s * 0.48, x - s * 0.06, y - s * 0.38);
+  c.stroke();
+  // A raised paw holding the string.
+  c.strokeStyle = '#eba667';
+  c.lineWidth = s * 0.11;
+  c.beginPath();
+  c.moveTo(x + s * 0.2, y - s * 0.35);
+  c.lineTo(x + s * 0.42, y - s * 0.62);
+  c.stroke();
+}
 
 // --- Drawing ----------------------------------------------------------------
 
