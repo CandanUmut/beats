@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import * as engine from '../../audio/engine';
 import { MOOD_BY_ID, BEAT_FEELS, feelName, type MoodId, type Recipe } from '../../data/moods';
 import { settings, recipeFor, saveRecipe } from '../../data/settings';
-import { SOUND_BY_ID } from '../../music/catalog';
+import { SOUND_BY_ID, displayName } from '../../music/catalog';
 import { Icon, MoodGlyph, Steps, TopBar } from '../components';
 import { loadForPlay, recipeParams, shortTitle } from '../Player';
 import { go } from '../router';
@@ -102,8 +102,8 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
   const elapsed = Math.max(0, now - slotStart);
   const label = (i: number) => {
     if (stage === 'music') {
-      const it = SOUND_BY_ID[musicOpts[i]];
-      return { t: shortTitle(musicOpts[i]), s: it?.category === 'classical' ? it.subtitle : it?.subtitle ?? '' };
+      const d = displayName(musicOpts[i]);
+      return { t: d.title, s: d.sub };
     }
     const rate = rateOpts(stage)[i];
     if (!rate) return { t: 'No beat', s: 'Just the music and breathing' };

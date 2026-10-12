@@ -145,13 +145,9 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
 
   return (
     <div class="instrument">
-      <canvas ref={canvas} class={`instrument-canvas ${kind}`} aria-label={kind === 'piano' ? 'Piano animation' : 'Strings animation'} role="img" />
+      <canvas ref={canvas} class={`instrument-canvas ${kind}${breathing ? '' : ' compact'}`} aria-label={kind === 'piano' ? 'Piano animation' : 'Strings animation'} role="img" />
       {hint && <div class="canvas-hint" style={{ opacity: playing ? 0 : 1 }} dangerouslySetInnerHTML={{ __html: hint }} />}
-      {onSwitch && (
-        <button class="view-btn" aria-label="Switch to the lamp" onClick={onSwitch}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="9" stroke-opacity=".45" /></svg>
-        </button>
-      )}
+      {onSwitch && <button class="view-pill" onClick={onSwitch}>Lamp</button>}
       {showPill && (
         <div class="breath-pill" ref={pill}>
           <span class="breath-dot" ref={dot} />
@@ -310,12 +306,12 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
     for (const [m, g] of o.glow) if (m >= a && m <= b) s = Math.max(s, g);
     return s;
   });
-  const pad = 22;
-  const gap = (H - pad * 2) / 4;
+  const top = 58;
+  const gap = (H - top - 18) / 4;
   c.font = '12px ui-sans-serif, system-ui, sans-serif';
   c.textBaseline = 'middle';
   for (let i = 0; i < 4; i++) {
-    const y = pad + gap * (i + 0.5);
+    const y = top + gap * (i + 0.5);
     const a = act[i];
     // The string: a gentle standing wave whose height follows the music.
     const amp = o.reduce ? 0 : (3 + 9 * (3 - i) / 3) * a;
@@ -330,9 +326,14 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
       if (x === 0) c.moveTo(x, yy); else c.lineTo(x, yy);
     }
     c.stroke();
-    c.globalAlpha = 0.6;
-    c.fillStyle = '#efe6d8';
-    c.fillText(STRING_NAMES[i], 8, y - gap * 0.32);
+    // Labels with a dark halo so the breath line never strikes them through.
+    c.globalAlpha = 0.85;
+    c.lineWidth = 4;
+    c.strokeStyle = 'rgba(20,18,16,.85)';
+    c.lineJoin = 'round';
+    c.strokeText(STRING_NAMES[i], 10, y - gap * 0.3);
+    c.fillStyle = 'rgba(239,230,216,0.7)';
+    c.fillText(STRING_NAMES[i], 10, y - gap * 0.3);
   }
   c.globalAlpha = 1;
 }

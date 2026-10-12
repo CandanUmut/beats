@@ -531,3 +531,23 @@ h1 em { display: block; text-wrap: balance; }
 .lamp-wrap { position: relative; width: 100%; display: flex; justify-content: center; }
 .lib-item .op { color: var(--faint); font-size: 12px; }
 .lib-composer { font-family: var(--serif); font-size: 16px; color: var(--muted); margin: 14px 0 2px; }
+
+/* Round 3 */
+.instrument-canvas.compact { height: clamp(160px, 24dvh, 220px); }
+.view-pill {
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  font-size: 12.5px; font-weight: 650; padding: 6px 12px; min-height: 32px;
+  border-radius: 999px; border: 1px solid var(--line-2);
+  background: rgba(20, 18, 16, 0.7); color: var(--text); cursor: pointer;
+}
+.hp-card { display: grid; grid-template-columns: auto 1fr; gap: 10px 12px; align-items: center; }
+.hp-actions { grid-column: 1 / -1; justify-self: end; display: flex; gap: 14px; align-items: center; }
+.sheet-head + .sheet-section { margin-top: 0; padding-top: 4px; }
+
+/* In session: only the light, the breath, the time and Stop. */
+.mix-card, .intro-card, .session-head .eyebrow, .hp-card { transition: opacity 0.6s ease; }
+.in-session .mix-card, .in-session .intro-card, .in-session .session-head .eyebrow, .in-session .hp-card, .in-session .visual-toggle { display: none; }
+.in-session .instrument-canvas { height: min(56dvh, 460px); }
+.in-session .instrument-canvas.compact { height: min(44dvh, 360px); }
+.in-session .session-head h1 { font-size: 24px; margin-top: 0; }
+.in-session .topbar { min-height: 52px; }

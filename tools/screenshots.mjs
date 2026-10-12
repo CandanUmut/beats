@@ -69,6 +69,8 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await page.click('.support-btn');
   await shot('20-help-sheet', false);
   await page.click('.sheet .btn.block');
+  await page.click('button[aria-label=Stop]');
+  await page.waitForTimeout(2500);
   // Tune sheet, then the full music library, then a strings piece.
   await page.click('.recipe button');
   await page.waitForSelector('.sheet');
@@ -77,6 +79,8 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await page.waitForSelector('.lib-item');
   await shot('26-music-library', false);
   await page.click('.lib-item:has-text("Warm strings")');
+  await page.waitForTimeout(1500);
+  await page.click('button[aria-label=Start]');
   await page.waitForTimeout(8000);
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot('27-strings-playing', false);

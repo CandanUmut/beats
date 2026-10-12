@@ -13,7 +13,7 @@ import { InstrumentView, type Timeline } from './Instrument';
 import { Icon, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
 import { go } from './router';
 import { LeftRight, Mono } from './screens/Onboarding';
-import { PIECE_BY_ID } from '../music/catalog';
+import { PIECE_BY_ID, displayName, displayForPart } from '../music/catalog';
 
 export interface PlayerProps {
   moodId: MoodId;
@@ -178,6 +178,12 @@ export function Player(p: PlayerProps) {
     updateSettings({ lastMood: p.moodId });
   }, []);
 
+  // While a session plays, the page quiets down to the light, the breath and Stop.
+  useEffect(() => {
+    document.documentElement.classList.toggle('in-session', running);
+    return () => document.documentElement.classList.remove('in-session');
+  }, [running]);
+
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => setElapsed(engine.sessionTime()), 250);
@@ -202,7 +208,8 @@ export function Player(p: PlayerProps) {
     const r = await loadForPlay(choice, setBusy);
     setTimeline(r.visual);
     const first = r.visual?.parts?.[0];
-    setNowPlaying(first ? { title: first.title, composer: first.composer } : null);
+    const d = first ? displayForPart(first.title) : null;
+    setNowPlaying(d ? { title: d.title, composer: d.sub } : null);
     return r.key;
   }
 
@@ -302,28 +309,29 @@ export function Player(p: PlayerProps) {
             breathing={recipe.breathing}
             pattern={pattern}
             showPill={false}
-            hint={recipe.breathing ? 'Press play, then <b>breathe with the light</b>: in as it rises, out as it falls.' : null}
+            hint={recipe.breathing ? 'Press play, then <b>breathe with the light</b>: in as it rises, out as it falls.' : 'Press play. The keys follow the music.'}
             onSwitch={() => updateSettings({ visual: 'circle' })}
-            onPart={(title, composer) => setNowPlaying({ title, composer })}
+            onPart={(title, composer) => { const d = displayForPart(title); setNowPlaying(d ? { title: d.title, composer: d.sub } : { title, composer }); }}
           />
         ) : (
           <div class="lamp-wrap">
             <Orb pattern={pattern} active={recipe.breathing} playing={playing} label={playing ? 'Just listen' : 'Press play'} />
-            {instrument && (
-              <button class="view-btn" aria-label={`Switch to the ${instrument}`} onClick={() => updateSettings({ visual: 'instrument' })}><Icon name="note" /></button>
-            )}
+            {instrument && <button class="view-pill" onClick={() => updateSettings({ visual: 'instrument' })}>{instrument === 'piano' ? 'Piano' : 'Strings'}</button>}
           </div>
+        )}
+        {!showInstrument && recipe.breathing && !playing && (
+          <p class="tiny muted center" style="margin:2px 0 0">then breathe with the light</p>
         )}
         {showInstrument && recipe.breathing && playing && <BreathCue pattern={pattern} playing={playing} />}
         <div class="now-playing">
           {sound !== 'none' && (
             <>
-              <div class="t">{nowPlaying?.title ?? item?.title ?? 'Your music'}</div>
-              <div class="c">{nowPlaying?.composer ?? item?.subtitle}</div>
+              <div class="t">{nowPlaying?.title ?? (item ? displayName(sound).title : 'Your music')}</div>
+              <div class="c">{nowPlaying?.composer ?? (item ? displayName(sound).sub : '')}</div>
             </>
           )}
         </div>
-        {!playing && <p class="fact-line">{p.note ?? mood.fact} <a href={`#/evidence/${mood.evidence}`}>Why</a></p>}
+        {!playing && (p.note ? <p class="fact-line">{p.note}</p> : <p class="fact-line">{mood.fact} <a href={`#/evidence/${mood.evidence}`}>Why</a></p>)}
         {playing && guideText && <div class="guide">{guideText}</div>}
       </div>
 
@@ -351,12 +359,12 @@ export function Player(p: PlayerProps) {
       {error && <div class="note danger-note">{error}</div>}
 
       {askHeadphones && !running && (
-        <div class="card tight" style="display:flex;gap:12px;align-items:center">
-          <span style="color:var(--accent);flex:none;display:grid"><Icon name="headphones" size={24} /></span>
-          <span class="small" style="flex:1">Using headphones? There's a headphone-only version of the beat.</span>
-          <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
-            <button class="btn small" onClick={() => setHpSheet(true)}>Check (20 s)</button>
+        <div class="card tight hp-card">
+          <span style="color:var(--accent);display:grid"><Icon name="headphones" size={24} /></span>
+          <span class="small">Using headphones? There's a headphone-only version of the beat.</span>
+          <span class="hp-actions">
             <button class="link-btn" style="color:var(--faint);font-weight:600" onClick={() => updateSettings({ headphones: { ...h, at: Date.now() } })}>Not now</button>
+            <button class="btn small" onClick={() => setHpSheet(true)}>Check (20 s)</button>
           </span>
         </div>
       )}
@@ -368,7 +376,7 @@ export function Player(p: PlayerProps) {
 
       {p.children?.(elapsed, running)}
 
-      <div class="card tight">
+      <div class="card tight mix-card">
         <div class="field-head" style="margin:0">
           <span class="eyebrow">Your {mood.name.toLowerCase()} mix</span>
           <span class="tiny" style={{ color: custom ? 'var(--accent)' : 'var(--faint)', fontWeight: 700 }}>{custom ? 'Yours' : 'Suggested'}</span>
@@ -443,10 +451,7 @@ export function shortTitle(id: string, upload?: engine.UploadInfo | null): strin
   if (id === 'none') return 'Silence';
   const it = SOUND_BY_ID[id];
   if (!it) return id;
-  if (it.category !== 'classical') return it.title;
-  const last = it.subtitle.split(' ').pop();
-  const t = it.title.replace(/ in [A-G][♭♯]? (major|minor)/, '').replace(/,? Op\. [0-9]+ No\. ([0-9]+)/, ' $1').replace(/\s*\(.*\)/, '').replace(/, BWV 846/, '');
-  return `${last}: ${t}`;
+  return displayName(id).title;
 }
 
 export function VolumeCard() {

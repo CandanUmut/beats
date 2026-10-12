@@ -28,7 +28,7 @@ export function EvidenceList() {
   );
   return (
     <div class="accent-honey">
-      <TopBar title="Why it works" />
+      <TopBar title="Research" />
       <h1>The research behind Steady</h1>
       <p class="lead">Steady is built on well-studied basics: slow breathing, calm music, urge surfing, movement and sleep habits. The beat layer is an experimental extra you can test yourself. Here is what the studies found, strong results and null ones, so you can decide.</p>
       <h2>What Steady is built on</h2>
@@ -156,8 +156,8 @@ export function Settings() {
         </details>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Your moods</h3>
-        <p class="tiny faint" style="margin-top:0">Tap a mood to run its taste test.</p>
+        <h3 style="margin-top:0">Find my sound</h3>
+        <p class="tiny faint" style="margin-top:0">A two-minute listening test for each mood.</p>
         {MOODS.map((m) => (
           <div class="row-link" role="button" tabIndex={0} onClick={() => go(`/tune/${m.id}`)}>
             <span>{m.name}</span>
@@ -209,7 +209,7 @@ export function Settings() {
       </div>
       <button class="row-link" onClick={() => go('/lab')}><span>Experiment Lab</span><Icon name="chev" /></button>
       <button class="row-link" onClick={() => go('/about')}><span>About & disclaimer</span><Icon name="chev" /></button>
-      <button class="row-link" onClick={() => go('/evidence')}><span>Why it works</span><Icon name="chev" /></button>
+      <button class="row-link" onClick={() => go('/evidence')}><span>Research</span><Icon name="chev" /></button>
     </div>
   );
 }

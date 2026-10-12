@@ -111,3 +111,17 @@ export function carrierFor(tonic: number): number {
   }
   return Math.round(best * 100) / 100;
 }
+
+/** One consistent name for a sound everywhere: title plus a short subline. */
+export function displayName(id: string): { title: string; sub: string } {
+  const piece = id.startsWith('piece:') ? PIECE_BY_ID[id.slice(6)] : null;
+  if (piece) return { title: piece.short ?? piece.title, sub: `${piece.composer.split(' ').pop()} · ${piece.feel ?? ''}` };
+  const it = SOUND_BY_ID[id];
+  return it ? { title: it.title, sub: it.subtitle } : { title: id, sub: '' };
+}
+
+/** Same, for a piece title coming from a playlist part. */
+export function displayForPart(title: string): { title: string; sub: string } | null {
+  const piece = PIECES.find((p) => p.title === title);
+  return piece ? displayName(`piece:${piece.id}`) : null;
+}
