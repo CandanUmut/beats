@@ -193,7 +193,7 @@ export const EVIDENCE: EvidenceItem[] = [
       'Lee et al. 2019 (~15 people): anger rose significantly with binaural beats alone, and fell with beats plus ASMR.',
       'Another small study (n = 28, 6 Hz) reportedly found more anger and less calm.',
     ],
-    takeaway: 'This app does not offer beats in the Calm-down flow. Breathe first.',
+    takeaway: 'Calm includes a soft beat by default because many people like the texture. If it ever makes you feel more wound up, switch it off in Tune, or test it blinded in the Lab. Breathing does the heavy lifting here.',
     sources: [S.lee],
   },
   {
@@ -205,7 +205,7 @@ export const EVIDENCE: EvidenceItem[] = [
       'In a double-blind pilot in a rehab center, craving stayed the same with beats and without them (thesis, not peer-reviewed).',
       'Other studies did not measure craving, had no control group, or looked at different outcomes.',
     ],
-    takeaway: 'In the Urge flow, sound is only a backdrop for the timer and prompts.',
+    takeaway: 'In Grounded, the timer, prompts and breathing do the work; the beat is there if you like it, and you can switch it off in Tune.',
     sources: [S.asim],
   },
   {
@@ -256,7 +256,7 @@ export const EVIDENCE: EvidenceItem[] = [
       'Memory/attention meta-analyses: g ≈ 0.40 on average, from small studies with some null and negative results.',
       '40 Hz binaural: better attention in one study, but no entrainment. A 57.3 Hz beat was used as an imperceptible control elsewhere and changed nothing.',
     ],
-    takeaway: 'Labeled "Experimental, unproven for focus". Beats may also distract.',
+    takeaway: 'Try it with and without in the taste test. Some people find a beat helps them settle; others find it distracting.',
     sources: [S.basu, S.garcia, S.engel, S.lopez],
   },
   {

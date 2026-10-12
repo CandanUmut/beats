@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'preact/hooks';
-import { GOALS } from '../../data/goals';
-import { Badge, GOAL_ICON, HelpButton, Icon } from '../components';
+import { MOODS, MOOD_BY_ID } from '../../data/moods';
+import { settings, isCustom, recipeFor } from '../../data/settings';
+import { HelpButton, Icon, MoodGlyph, helpOpen } from '../components';
 import { go } from '../router';
 import { allSessions, nudges, type Nudge } from '../../data/usage';
-import { helpOpen } from '../components';
+import { shortTitle } from '../Player';
 
 function greeting(): string {
   const h = new Date().getHours();
   if (h < 5) return 'Still up?';
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'Good morning.';
+  if (h < 18) return 'Good afternoon.';
+  if (h < 22) return 'Good evening.';
+  return 'Getting late.';
 }
 
 export function Home() {
@@ -18,45 +20,57 @@ export function Home() {
   useEffect(() => {
     allSessions().then((s) => setNudge(nudges(s)));
   }, []);
+  const last = settings.value.lastMood ? MOOD_BY_ID[settings.value.lastMood] : null;
   return (
     <>
       <header class="topbar">
-        <div class="brand"><span class="brand-dot" /> Steady</div>
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="7" fill="currentColor" /><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-opacity=".4" /></svg>
+          Steady
+        </div>
         <HelpButton />
       </header>
-      <h1>{greeting()}</h1>
-      <p class="lead">What do you need right now?</p>
+
+      <h1>{greeting()} <em>How do you want to feel?</em></h1>
 
       {nudge.map((n) => (
-        <div class="note accent-calm" style="border-left-color:var(--calm)">
+        <div class="note accent-clay">
           {n.text}{' '}
-          <button class="btn small" style="margin-top:8px" onClick={() => (helpOpen.value = true)}>See support options</button>
+          <button class="link-btn" onClick={() => (helpOpen.value = true)}>See support options</button>
         </div>
       ))}
 
-      {GOALS.map((g) => (
-        <div class={`goal-card accent-${g.accent}`} role="button" tabIndex={0} onClick={() => go(`/${g.id}`)} onKeyDown={(e) => e.key === 'Enter' && go(`/${g.id}`)}>
-          <div class="goal-name">
-            <span class="goal-glyph"><Icon name={GOAL_ICON[g.id]} /></span>
-            {g.name}
-          </div>
-          <span class="chev"><Icon name="chev" size={20} /></span>
-          <div class="goal-tag">{g.tagline}</div>
-          <div class="badges">
-            {g.badges.map((b) => <Badge label={b.label} evidence={b.evidence} />)}
-          </div>
-        </div>
-      ))}
+      <div class="mood-grid">
+        {MOODS.map((m) => (
+          <button class={`mood accent-${m.accent}`} onClick={() => go(`/m/${m.id}`)}>
+            {isCustom(m.id) && <span class="mine">Yours</span>}
+            <MoodGlyph id={m.id} />
+            <div>
+              <div class="name">{m.name}</div>
+              <div class="line">{m.line}</div>
+            </div>
+          </button>
+        ))}
+      </div>
 
-      <div class="bottom-nav">
-        <button onClick={() => go('/breathe')}><Icon name="lungs" />Breathe</button>
-        <button onClick={() => go('/lab')}><Icon name="flask" />Lab</button>
-        <button onClick={() => go('/evidence')}><Icon name="book" />Evidence</button>
+      {last && (
+        <button class={`resume accent-${last.accent}`} onClick={() => go(`/m/${last.id}`)}>
+          <span class="dot"><Icon name="play" /></span>
+          <span>
+            <div class="eyebrow">Pick up where you left off</div>
+            <div style="font-weight:650">{last.name} · {shortTitle(recipeFor(last.id).sound)}</div>
+          </span>
+        </button>
+      )}
+
+      <div class="quick-row">
+        <button onClick={() => go('/move')}><Icon name="walk" />Move</button>
+        <button onClick={() => go('/sleep/diary')}><Icon name="moon" />Sleep log</button>
+        <button onClick={() => go('/evidence')}><Icon name="book" />Research</button>
         <button onClick={() => go('/settings')}><Icon name="gear" />Settings</button>
       </div>
-      <p class="tiny faint center" style="margin-top:20px">
-        An experimental wellness tool, not a medical device. <a href="#/about">About & disclaimer</a>
-      </p>
+
+      <p class="tiny faint center" style="margin-top:22px"><a href="#/about">About Steady</a></p>
     </>
   );
 }

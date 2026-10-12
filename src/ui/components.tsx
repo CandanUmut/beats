@@ -31,6 +31,13 @@ const paths: Record<string, JSX.Element> = {
   sliders: <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4" />,
   upload: <path d="M12 20V9m0 0l-4.5 4.5M12 9l4.5 4.5M5 4.5h14" />,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  note: <><path d="M9 18V5.5l10-2V16" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></>,
+  clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
+  spark: <path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />,
+  headphones: <><path d="M4 15v-2.5a8 8 0 0 1 16 0V15" /><rect x="3.5" y="14" width="4" height="6" rx="1.5" /><rect x="16.5" y="14" width="4" height="6" rx="1.5" /></>,
+  volume: <><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>,
+  chevdown: <path d="M6 9.5l6 6 6-6" />,
+  user: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c1-4 4-6 7-6s6 2 7 6" /></>,
   x: <path d="M6 6l12 12M18 6L6 18" />,
 };
 
@@ -62,10 +69,24 @@ export const helpOpen = signal(false);
 
 export function HelpButton() {
   return (
-    <button class="help-pill" onClick={() => (helpOpen.value = true)}>
-      <Icon name="heart" size={16} /> Talk to someone
+    <button class="support-btn" onClick={() => (helpOpen.value = true)} aria-label="Talk to someone">
+      <Icon name="heart" /> Support
     </button>
   );
+}
+
+/** Line-art glyphs for the moods. */
+export function MoodGlyph({ id }: { id: string }) {
+  const common = { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round' as const, 'stroke-linejoin': 'round' as const };
+  const g: Record<string, preact.JSX.Element> = {
+    calm: <><path d="M6 28c6-6 12-6 18 0s12 6 18 0" {...common} /><path d="M6 20c6-6 12-6 18 0s12 6 18 0" {...common} opacity=".5" /><path d="M6 36c6-6 12-6 18 0s12 6 18 0" {...common} opacity=".3" /></>,
+    relaxed: <><circle cx="24" cy="24" r="9" {...common} /><path d="M24 7v4M24 37v4M7 24h4M37 24h4M12 12l3 3M33 33l3 3M12 36l3-3M33 15l3-3" {...common} opacity=".55" /></>,
+    sleepy: <><path d="M32 30a12 12 0 0 1-14-18 12 12 0 1 0 14 18z" {...common} /><circle cx="35" cy="12" r="1.2" fill="currentColor" /><circle cx="39" cy="20" r="0.9" fill="currentColor" opacity=".6" /></>,
+    focused: <><circle cx="24" cy="24" r="14" {...common} opacity=".35" /><circle cx="24" cy="24" r="8" {...common} opacity=".65" /><circle cx="24" cy="24" r="2.5" fill="currentColor" /></>,
+    grounded: <><path d="M8 36h32" {...common} /><path d="M24 36V20M24 26c-4-1-7-4-7-9 5 0 7 3 7 9zM24 23c4-1 7-4 7-9-5 0-7 3-7 9z" {...common} /><path d="M14 40h20" {...common} opacity=".4" /></>,
+    brighter: <><path d="M8 32h32" {...common} opacity=".4" /><path d="M14 32a10 10 0 0 1 20 0" {...common} /><path d="M24 12v4M12 18l3 3M36 18l-3 3" {...common} opacity=".6" /></>,
+  };
+  return <svg viewBox="0 0 48 48" class="glyph" aria-hidden="true">{g[id]}</svg>;
 }
 
 export function HelpSheet() {

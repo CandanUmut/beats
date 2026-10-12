@@ -7,6 +7,8 @@ import { Onboarding } from './ui/screens/Onboarding';
 import { Breathe, Calm, Focus, Move, Relax, Sleep, Urge } from './ui/screens/Flows';
 import { About, EvidenceDetail, EvidenceList, Log, Myths, Settings, SleepDiary } from './ui/screens/Info';
 import { Lab } from './ui/screens/Lab';
+import { Tuner } from './ui/screens/Tuner';
+import { MOOD_BY_ID, type MoodId } from './data/moods';
 
 export function App() {
   useEffect(() => {
@@ -17,6 +19,8 @@ export function App() {
   let page;
   if (!settings.value.onboarded) page = <Onboarding onDone={() => go('/')} />;
   else if (r === '/') page = <Home />;
+  else if (r.startsWith('/m/') && MOOD_BY_ID[r.slice(3) as MoodId]) page = moodPage(r.slice(3) as MoodId);
+  else if (r.startsWith('/tune/') && MOOD_BY_ID[r.slice(6) as MoodId]) page = <Tuner moodId={r.slice(6) as MoodId} />;
   else if (r === '/calm') page = <Calm />;
   else if (r === '/urge') page = <Urge />;
   else if (r === '/relax') page = <Relax />;
@@ -35,9 +39,20 @@ export function App() {
   else if (r === '/recheck') page = <Onboarding recheck onDone={() => go('/settings')} />;
   else page = <Home />;
   return (
-    <div class="app" key={r}>
+    <div class={`app${r === '/' ? ' home' : ''}`} key={r}>
       {page}
       <HelpSheet />
     </div>
   );
+}
+
+function moodPage(id: MoodId) {
+  switch (MOOD_BY_ID[id].flow) {
+    case 'calm': return <Calm />;
+    case 'urge': return <Urge />;
+    case 'relax': return <Relax />;
+    case 'sleep': return <Sleep />;
+    case 'focus': return <Focus />;
+    default: return <Breathe />;
+  }
 }

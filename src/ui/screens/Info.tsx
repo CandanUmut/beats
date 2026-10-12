@@ -2,7 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { EVIDENCE, EVIDENCE_BY_ID, GRADE_KEY, MYTHS, type Grade } from '../../data/evidence';
 import { DISCLAIMER, STOP_DAY, STOP_STUDY, ASK_FIRST, NEVER_WHILE } from '../../data/safety';
 import { REGIONS } from '../../data/helplines';
-import { settings, updateSettings } from '../../data/settings';
+import { settings, updateSettings, isCustom, resetRecipe } from '../../data/settings';
+import { MOODS } from '../../data/moods';
 import { allSessions, listenedHoursLast7Days, weeklyBudgetHours, type SessionRecord } from '../../data/usage';
 import { allCheckIns, allDiary, saveDiary, hoursBetween, type CheckIn, type DiaryEntry } from '../../data/checkins';
 import { uid, db } from '../../data/db';
@@ -12,31 +13,46 @@ import { go } from '../router';
 import { UrgeChart } from './Flows';
 import { downloadText, toCsv } from '../../lib/csv';
 
+const EXTRAS = new Set(['beats-entrainment', 'beats-anger', 'beats-urge', 'beats-relax', 'beats-procedures', 'beats-sleep', 'beats-focus']);
+
 export function EvidenceList() {
+  const [showExtras, setShowExtras] = useState(false);
+  const row = (e: (typeof EVIDENCE)[number]) => (
+    <button class="row-link" onClick={() => go(`/evidence/${e.id}`)}>
+      <span>
+        <div style="font-weight:650">{e.title}</div>
+        <div class="muted small">{e.summary}</div>
+      </span>
+      <span style="flex:none"><GradeChip grade={e.grade} /></span>
+    </button>
+  );
   return (
-    <div class="accent-relax">
-      <TopBar title="Evidence" />
-      <h1>What the science says</h1>
-      <p class="lead">Every part of this app has a grade. Tap any one for the studies, including the ones that found nothing.</p>
+    <div class="accent-honey">
+      <TopBar title="Research" />
+      <h1>The research behind Steady</h1>
+      <p class="lead">Steady is built on well-studied basics: slow breathing, calm music, urge surfing, movement and sleep habits. The beat layer is an experimental extra you can test yourself. Here is what the studies found, strong results and null ones, so you can decide.</p>
+      <h2>What Steady is built on</h2>
+      <div class="card">{EVIDENCE.filter((e) => !EXTRAS.has(e.id) && e.id !== 'venting').map(row)}</div>
       <div class="card">
-        {EVIDENCE.map((e) => (
-          <button class="row-link" onClick={() => go(`/evidence/${e.id}`)}>
-            <span>
-              <div style="font-weight:600">{e.title}</div>
-              <div class="muted small">{e.summary}</div>
-            </span>
-            <span style="flex:none"><GradeChip grade={e.grade} /></span>
-          </button>
-        ))}
+        <button class="row-link" style="border:0;padding:4px 0" onClick={() => setShowExtras(!showExtras)}>
+          <span><div class="serif" style="font-size:19px">The beat layer</div><div class="muted small">An experimental extra. What studies on binaural beats and pulses found.</div></span>
+          <Icon name={showExtras ? 'chevdown' : 'chev'} />
+        </button>
+        {showExtras && EVIDENCE.filter((e) => EXTRAS.has(e.id)).map(row)}
       </div>
       <button class="btn block" onClick={() => go('/myths')}>Myths, briefly</button>
+      <div class="card">
+        <h3 style="margin-top:0">Test it on yourself</h3>
+        <p class="small muted">Studies describe averages. The Lab runs a fair, blinded experiment on you: does the beat, the breathing guide or a type of music actually help you?</p>
+        <button class="btn small" onClick={() => go('/lab')}><Icon name="flask" /> Open the Lab</button>
+      </div>
       <div class="card">
         <h3 style="margin-top:0">Grading key</h3>
         {(Object.keys(GRADE_KEY) as Grade[]).map((g) => (
           <p class="small"><GradeChip grade={g} /> <span class="muted">{GRADE_KEY[g]}</span></p>
         ))}
       </div>
-      <p class="tiny faint">Source: the project's research summary (docs/RESEARCH.md, October 2026). Some numbers come from abstracts; check the primary paper before relying on any single figure.</p>
+      <p class="tiny faint">Source: the project's research summary (docs/RESEARCH.md, October 2026).</p>
     </div>
   );
 }
@@ -128,22 +144,34 @@ export function Settings() {
       <TopBar title="Settings" />
       <h1>Settings</h1>
       <VolumeCard />
+      <p class="tiny faint" style="margin:-4px 4px 10px">Soft is best: you should still hear someone talk to you. Your phone also has a loudness limiter: on iPhone, Settings → Sounds & Haptics → Headphone Safety → Reduce Loud Audio; on Android, look for a media volume limiter.</p>
       <div class="card">
-        <h3 style="margin-top:0">Weekly listening</h3>
-        <div class="field-head"><span>Last 7 days</span><span class="v">{hours.toFixed(1)} h of {budget.toFixed(0)} h</span></div>
-        <div class="meter"><i style={{ width: `${Math.min(100, (hours / budget) * 100)}%`, background: hours > budget ? 'var(--weak)' : 'var(--accent)' }} /></div>
-        <Slider label="Assumed level" value={s.assumedDb} min={75} max={89} step={1} format={(v) => `${v} dB(A) → ${weeklyBudgetHours(v).toFixed(0)} h/week`} onInput={(assumedDb) => updateSettings({ assumedDb })} />
-        <p class="tiny faint" style="margin:0">Based on the WHO-ITU safe-listening reference (80 dB for 40 h a week; every +3 dB halves it). A browser can't measure how loud it really is in your ears, so this assumes a conservative level.</p>
+        <h3 style="margin-top:0">Listening this week</h3>
+        <div class="field-head"><span>{hours.toFixed(1)} h of a safe {budget.toFixed(0)} h</span></div>
+        <div class="meter"><i style={{ width: `${Math.min(100, (hours / budget) * 100)}%`, background: hours > budget ? 'var(--clay)' : 'var(--accent)' }} /></div>
+        <details class="more">
+          <summary>How this is calculated</summary>
+          <Slider label="Assumed level" value={s.assumedDb} min={75} max={89} step={1} format={(v) => `${v} dB(A) → ${weeklyBudgetHours(v).toFixed(0)} h/week`} onInput={(assumedDb) => updateSettings({ assumedDb })} />
+          <p class="tiny faint" style="margin:0">Based on the WHO-ITU safe-listening reference (80 dB for 40 h a week; every +3 dB halves it). A browser can't measure how loud it really is in your ears, so this assumes a conservative level.</p>
+        </details>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Beats <span class="exp-tag">Experimental</span></h3>
-        <Toggle label="Add beats automatically" hint="In Relax, Sleep, Focus and Breathe. Never in Calm down or Ride an urge." checked={s.autoBeats} onChange={(autoBeats) => updateSettings({ autoBeats })} />
-        <Seg value={s.beatMode} onChange={(beatMode) => updateSettings({ beatMode })} label="Beat type" options={[{ v: 'binaural', label: 'Binaural (headphones)' }, { v: 'pulse', label: 'Pulse (speakers OK)' }]} />
-        <p class="tiny faint" style="margin-bottom:0">The beat tone is tuned to the key of the music. Evidence that beats add anything on top of music is weak. The Lab can test it for you, blinded. <a href="#/evidence/beats-entrainment">Why?</a></p>
+        <h3 style="margin-top:0">Find my sound</h3>
+        <p class="tiny faint" style="margin-top:0">A two-minute listening test for each mood.</p>
+        {MOODS.map((m) => (
+          <div class="row-link" role="button" tabIndex={0} onClick={() => go(`/tune/${m.id}`)}>
+            <span>{m.name}</span>
+            <span style="display:flex;align-items:center;gap:10px">
+              <span class="small" style={{ color: isCustom(m.id) ? 'var(--accent)' : 'var(--faint)' }}>{isCustom(m.id) ? 'Yours' : 'Suggested'}</span>
+              {isCustom(m.id) && <button class="link-btn" onClick={(e) => { e.stopPropagation(); resetRecipe(m.id); }}>Reset</button>}
+              <Icon name="chev" />
+            </span>
+          </div>
+        ))}
       </div>
       <div class="card">
         <h3 style="margin-top:0">Visuals</h3>
-        <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Breathing circle' }]} />
+        <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Lamp' }]} />
         <p class="tiny faint" style="margin-bottom:0">Animations move slowly and never flash. If your device asks for reduced motion, the falling notes are turned off.</p>
       </div>
       <div class="card">
@@ -179,8 +207,9 @@ export function Settings() {
           </div>
         )}
       </div>
+      <button class="row-link" onClick={() => go('/lab')}><span>Experiment Lab</span><Icon name="chev" /></button>
       <button class="row-link" onClick={() => go('/about')}><span>About & disclaimer</span><Icon name="chev" /></button>
-      <button class="row-link" onClick={() => go('/evidence')}><span>Evidence</span><Icon name="chev" /></button>
+      <button class="row-link" onClick={() => go('/evidence')}><span>Research</span><Icon name="chev" /></button>
     </div>
   );
 }

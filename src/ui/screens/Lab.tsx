@@ -35,16 +35,16 @@ function LabHome() {
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => { listPlans().then(setPlans); }, []);
   return (
-    <div class="accent-relax">
+    <div class="accent-honey">
       <TopBar title="Experiment Lab" />
       <h1>Does it work for you?</h1>
       <p class="lead">Test one part at a time, with everything else kept the same. Sessions are randomized and, where possible, blinded: you won't know which version you got until the end.</p>
       <button class="btn primary block" onClick={() => go('/lab/new')}><Icon name="flask" size={18} /> New experiment</button>
       {plans && plans.length > 0 && <h2>Your experiments</h2>}
       {plans?.map((p) => (
-        <button class="goal-card" style="--accent:var(--relax)" onClick={() => go(`/lab/${p.id}`)}>
-          <div class="goal-name" style="font-size:17px">{p.name || FACTORS[p.factor].name}</div>
-          <div class="goal-tag small">{GOAL_BY_ID[p.goal].name} · {FACTORS[p.factor].name} · {p.status}</div>
+        <button class="lib-item" onClick={() => go(`/lab/${p.id}`)}>
+          <span class="ic"><Icon name="flask" /></span>
+          <span><div class="tt">{p.name || FACTORS[p.factor].name}</div><div class="st">{GOAL_BY_ID[p.goal].name} · {p.status}</div></span>
         </button>
       ))}
       <div class="card">
@@ -57,7 +57,6 @@ function LabHome() {
           <li>Results unlock at the end, with a plain verdict.</li>
         </ol>
       </div>
-      <div class="note warn small">{STOP_DAY} {STOP_STUDY}</div>
       <button class="btn small ghost" onClick={() => file.current?.click()}><Icon name="upload" size={16} /> Import from CSV</button>
       <input ref={file} type="file" accept=".csv,text/csv" hidden onChange={async (e) => {
         const f = (e.target as HTMLInputElement).files?.[0];
@@ -85,7 +84,7 @@ function NewExperiment() {
   const isRt = p.outcome === 'rt_post';
 
   return (
-    <div class="accent-relax">
+    <div class="accent-honey">
       <TopBar title="Lab" />
       <h1>Plan your experiment</h1>
       <div class="card">
@@ -223,7 +222,7 @@ function ExperimentPage({ id }: { id: string }) {
   const warn = warnings(plan, trials);
   const f = FACTORS[plan.factor];
   return (
-    <div class="accent-relax">
+    <div class="accent-honey">
       <TopBar title="Experiment" onBack={() => go('/lab')} />
       <h1>{plan.name}</h1>
       <p class="muted small">Locked {plan.lockedAt ? new Date(plan.lockedAt).toLocaleString() : ''} · {plan.status}</p>
@@ -332,7 +331,7 @@ function LabSession({ id }: { id: string }) {
 
   if (!plan) return <div />;
   const next = nextSession(plan, trials);
-  if (!next && step !== 'saved') return <div class="accent-relax"><TopBar title="Lab session" /><p>All sessions are done. <a href={`#/lab/${plan.id}/results`}>See results</a></p></div>;
+  if (!next && step !== 'saved') return <div class="accent-honey"><TopBar title="Lab session" /><p>All sessions are done. <a href={`#/lab/${plan.id}/results`}>See results</a></p></div>;
   const f = FACTORS[plan.factor];
   const scales = SCALES;
 
@@ -381,7 +380,7 @@ function LabSession({ id }: { id: string }) {
   const allPost = scales.every((s) => post[s.id] !== undefined);
 
   return (
-    <div class="accent-relax">
+    <div class="accent-honey">
       <TopBar title={isMain ? `Session ${next!.index - plan.baseline + 1} of ${plan.pairs * 2}` : 'Baseline session'} onBack={() => go(`/lab/${plan.id}`)} />
       {step === 'pre' && (
         <>
@@ -467,7 +466,7 @@ function Results({ id }: { id: string }) {
   const next = nextSession(plan, trials);
   if (next && plan.status === 'running') {
     return (
-      <div class="accent-relax">
+      <div class="accent-honey">
         <TopBar title="Results" onBack={() => go(`/lab/${plan.id}`)} />
         <h1>Not yet</h1>
         <p class="lead">Results stay hidden until the planned end ({trials.length} of {totalSessions(plan)} sessions done). Peeking early makes it too easy to fool yourself.</p>
@@ -480,7 +479,7 @@ function Results({ id }: { id: string }) {
   const fmt = (x: number | null) => (x === null ? '–' : unit === 'ms' ? `${x.toFixed(0)} ms` : x.toFixed(2));
   const tone = a.verdict === 'works' ? 'var(--strong)' : a.verdict === 'worse' ? 'var(--danger)' : 'var(--moderate)';
   return (
-    <div class="accent-relax">
+    <div class="accent-honey">
       <TopBar title="Results" onBack={() => go(`/lab/${plan.id}`)} />
       <h1>{plan.name}</h1>
       {plan.status === 'stopped' && <div class="note warn">This experiment was stopped early{plan.stopReason ? ` (${plan.stopReason})` : ''}. The numbers below are not reliable.</div>}

@@ -2,6 +2,7 @@ import { signal, effect } from '@preact/signals';
 import { db } from './db';
 import type { BreathSettings } from '../audio/dsp/breath';
 import { DEFAULT_BREATH } from '../audio/dsp/breath';
+import { MOOD_BY_ID, type MoodId, type Recipe } from './moods';
 
 export interface Settings {
   onboarded: boolean;
@@ -22,6 +23,11 @@ export interface Settings {
   beatMode: 'binaural' | 'pulse';
   /** Show the instrument animation or the breathing circle. */
   visual: 'instrument' | 'circle';
+  /** The user's own version of each mood (from Fine-tune or the taste test). */
+  recipes: Partial<Record<MoodId, Recipe>>;
+  lastMood: MoodId | null;
+  /** How many times the "using headphones?" card has been shown. */
+  hpPrompts: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +43,9 @@ export const DEFAULT_SETTINGS: Settings = {
   autoBeats: true,
   beatMode: 'binaural',
   visual: 'instrument',
+  recipes: {},
+  lastMood: null,
+  hpPrompts: 0,
 };
 
 export const settings = signal<Settings>(DEFAULT_SETTINGS);
@@ -58,4 +67,32 @@ export async function loadSettings(): Promise<void> {
 
 export function updateSettings(patch: Partial<Settings>): void {
   settings.value = { ...settings.value, ...patch };
+}
+
+/** The recipe to use for a mood: the user's version if they made one. */
+export function recipeFor(mood: MoodId): Recipe {
+  const mine = settings.value.recipes[mood];
+  const base = MOOD_BY_ID[mood].recipe;
+  return mine ? { ...base, ...mine, breath: { ...base.breath, ...mine.breath }, beat: { ...base.beat, ...mine.beat } } : base;
+}
+
+export function saveRecipe(mood: MoodId, r: Recipe): void {
+  settings.value = { ...settings.value, recipes: { ...settings.value.recipes, [mood]: r } };
+}
+
+export function resetRecipe(mood: MoodId): void {
+  const recipes = { ...settings.value.recipes };
+  delete recipes[mood];
+  settings.value = { ...settings.value, recipes };
+}
+
+export function isCustom(mood: MoodId): boolean {
+  return !!settings.value.recipes[mood];
+}
+
+/** Headphone beat only when the user confirmed stereo headphones. */
+export function resolveBeatType(t: 'auto' | 'binaural' | 'pulse'): 'binaural' | 'pulse' {
+  if (t !== 'auto') return t;
+  const h = settings.value.headphones;
+  return h.lr === 'ok' && h.mono === 'stereo' ? 'binaural' : 'pulse';
 }
