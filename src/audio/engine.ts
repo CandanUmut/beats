@@ -69,15 +69,24 @@ function call(msg: DistOmit<WorkerIn, 'id'>, transfer: Transferable[] = [], prog
 /** Create/resume the AudioContext. Must be called from a tap (iOS rule). */
 export async function ensureAudio(): Promise<AudioContext> {
   if (!ctx) {
+    // Ask to play like a music app (Safari 16.4+): sound keeps going with the
+    // screen locked (fixed in iOS 17.5, WebKit bug 261554) and isn't muted by
+    // the silent switch.
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    try { if (nav.audioSession) nav.audioSession.type = 'playback'; } catch { /* not supported */ }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     ctx = new AC({ latencyHint: 'playback' });
     await ctx.audioWorklet.addModule(workletUrl);
     node = new AudioWorkletNode(ctx, 'steady-mixer', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
     node.connect(ctx.destination);
     node.port.onmessage = (e: MessageEvent<WorkletOut>) => onWorklet(e.data);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running' && status.value === 'playing') ctx.resume();
-    });
+    // If the system paused us (a call, Siri, an older iOS locking), pick up again when we're back.
+    const wake = () => {
+      if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running' && status.value === 'playing') void ctx.resume();
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('focus', wake);
   }
   if (ctx.state !== 'running') await ctx.resume();
   return ctx;
@@ -366,6 +375,16 @@ function setMediaSession(title: string) {
 function clearMediaSession() {
   if (!('mediaSession' in navigator)) return;
   try { navigator.mediaSession.playbackState = 'none'; } catch { /* ignore */ }
+}
+
+/** True on iPhones/iPads where sound may stop when the screen locks (before iOS 17.5). */
+export function lockMayStopSound(): boolean {
+  if (!isIOS()) return false;
+  if (!('audioSession' in navigator)) return true;
+  const m = /OS (\d+)_(\d+)/.exec(navigator.userAgent);
+  if (!m) return false;
+  const major = +m[1], minor = +m[2];
+  return major < 17 || (major === 17 && minor < 5);
 }
 
 export function isIOS(): boolean {

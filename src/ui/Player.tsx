@@ -10,7 +10,8 @@ import { db } from '../data/db';
 import { BEAT_FEELS, MINUTE_OPTIONS, MOOD_BY_ID, STRENGTH, feelName, type MoodId, type Recipe, type Visual } from '../data/moods';
 export type { Visual };
 import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
-import { InstrumentView, type Timeline } from './Instrument';
+import { InstrumentView, MusicStrip, type Timeline } from './Instrument';
+import { setCatBreath } from './Cat';
 import { SceneView, SceneThumb } from './Scene';
 import { SCENES, type SceneId } from './scenes';
 import { Icon, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
@@ -141,6 +142,9 @@ export async function loadForPlay(id: string, onBusy?: (s: string | null) => voi
 
 type Section = 'music' | 'look' | 'breathing' | 'beat' | 'length';
 
+/** Set before opening a mood page to start its session right away (Resume on Home). */
+export const autoplay: { mood: MoodId | null } = { mood: null };
+
 export function Player(p: PlayerProps) {
   const mood = MOOD_BY_ID[p.moodId];
   const s = settings.value;
@@ -152,7 +156,6 @@ export function Player(p: PlayerProps) {
   const [tune, setTune] = useState<Section | null>(null);
   const [library, setLibrary] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [showVol, setShowVol] = useState(false);
   const [hpSheet, setHpSheet] = useState(false);
   const [running, setRunning] = useState(false);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
@@ -172,7 +175,10 @@ export function Player(p: PlayerProps) {
   // What the stage shows: a scene, the piano or strings (needs notes), or the lamp.
   const view = resolveView(recipe);
   const sceneId: SceneId = recipe.scene ?? 'forest';
-  const breathWord = SCENES.find((x) => x.id === sceneId)?.breath ?? 'the light';
+  const sceneHint = SCENES.find((x) => x.id === sceneId)?.hint ?? 'in as it rises, out as it falls';
+  // The slim keys/strings strip under a painting, when the music has notes.
+  const stripKind = SOUND_BY_ID[sound]?.visual;
+  const strip: 'piano' | 'strings' | null = view === 'scene' && s.musicStrip && hasNotes(sound) && (stripKind === 'piano' || stripKind === 'strings') ? stripKind : null;
 
   function setRecipe(r: Recipe) {
     setRecipeState(r);
@@ -182,6 +188,20 @@ export function Player(p: PlayerProps) {
   useEffect(() => {
     updateSettings({ lastMood: p.moodId });
   }, []);
+
+  // Bedtime: a minute in, the screen dims almost to black. A tap brings it back for a while.
+  useEffect(() => {
+    if (!running || !p.sleep) return;
+    const html = document.documentElement;
+    let tm = window.setTimeout(() => html.classList.add('night-dim'), 60000);
+    const wake = () => {
+      html.classList.remove('night-dim');
+      clearTimeout(tm);
+      tm = window.setTimeout(() => html.classList.add('night-dim'), 10000);
+    };
+    window.addEventListener('pointerdown', wake);
+    return () => { clearTimeout(tm); window.removeEventListener('pointerdown', wake); html.classList.remove('night-dim'); };
+  }, [running, p.sleep]);
 
   // While a session plays, the page quiets down to the light, the breath and Stop.
   useEffect(() => {
@@ -205,7 +225,7 @@ export function Player(p: PlayerProps) {
   }, [running]);
 
   useEffect(() => {
-    if (p.autoStart) void start();
+    if (p.autoStart || autoplay.mood === p.moodId) { autoplay.mood = null; void start(); }
   }, []);
 
   async function keyFor(choice: string): Promise<string | null> {
@@ -236,6 +256,7 @@ export function Player(p: PlayerProps) {
         onEnded: () => void finish(false, true),
       });
       setRunning(true);
+      setCatBreath(pattern);
       if (!p.sleep && 'wakeLock' in navigator) {
         try { wake.current = await (navigator as Navigator & { wakeLock: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock.request('screen'); } catch { /* not allowed */ }
       }
@@ -251,6 +272,7 @@ export function Player(p: PlayerProps) {
     const secs = natural ? total : engine.sessionTime();
     if (!natural) await engine.stopSession(2);
     setRunning(false);
+    setCatBreath(null);
     wake.current?.release().catch(() => {});
     wake.current = null;
     await recordSession(mood.flow, startedAt.current, Math.min(secs, total));
@@ -298,7 +320,7 @@ export function Player(p: PlayerProps) {
 
   const beatType = resolveBeatType(recipe.beat.type);
   const h = s.headphones;
-  const askHeadphones = recipe.beat.on && recipe.beat.type === 'auto' && h.lr === null && !h.at && s.hpPrompts < 2;
+  const askHeadphones = p.moodId !== 'calm' && p.moodId !== 'grounded' && recipe.beat.on && recipe.beat.type === 'auto' && h.lr === null && !h.at && s.hpPrompts < 2;
   useEffect(() => {
     if (askHeadphones) updateSettings({ hpPrompts: settings.value.hpPrompts + 1 });
   }, []);
@@ -320,9 +342,12 @@ export function Player(p: PlayerProps) {
             onPart={(title, composer) => { const d = displayForPart(title); setNowPlaying(d ? { title: d.title, composer: d.sub } : { title, composer }); }}
           />
         ) : view === 'scene' ? (
-          <SceneView scene={sceneId} playing={playing} breathing={recipe.breathing} pattern={pattern} hint={recipe.breathing ? `Press play, then <b>breathe with ${breathWord}</b>: in as it rises, out as it falls.` : null}>
-            <button class="view-pill" onClick={() => setTune('look')}><Icon name="eye" size={14} /> View</button>
-          </SceneView>
+          <div class={`scene-frame${strip ? ' with-strip' : ''}`}>
+            <SceneView scene={sceneId} playing={playing} breathing={recipe.breathing} pattern={pattern} hint={recipe.breathing ? `Press play, then breathe <b>${sceneHint}</b>.` : null}>
+              <button class="view-pill" onClick={() => setTune('look')}><Icon name="eye" size={14} /> View</button>
+            </SceneView>
+            {strip && <MusicStrip kind={strip} timeline={timeline} playing={playing} onOpen={() => setRecipe({ ...recipe, visual: strip })} />}
+          </div>
         ) : (
           <div class="lamp-wrap">
             <Orb pattern={pattern} active={recipe.breathing} playing={playing} label={playing ? 'Just listen' : 'Press play'} />
@@ -334,19 +359,17 @@ export function Player(p: PlayerProps) {
         )}
         {view !== 'lamp' && recipe.breathing && playing && <BreathCue pattern={pattern} playing={playing} />}
         <div class="now-playing">
-          {sound !== 'none' && (
-            <>
-              <div class="t">{nowPlaying?.title ?? (item ? displayName(sound).title : 'Your music')}</div>
-              <div class="c">{nowPlaying?.composer ?? (item ? displayName(sound).sub : '')}</div>
-            </>
-          )}
+          <button class="np-btn" onClick={() => setLibrary(true)} aria-label="Change the music">
+            <span class="t">{sound === 'none' ? 'Silence' : nowPlaying?.title ?? (item ? displayName(sound).title : 'Your music')} <Icon name="chevdown" /></span>
+            {sound !== 'none' && <span class="c">{nowPlaying?.composer ?? (item ? displayName(sound).sub : '')}</span>}
+          </button>
         </div>
         {!playing && (p.note ? <p class="fact-line">{p.note}</p> : <p class="fact-line">{mood.fact} <a href={`#/evidence/${mood.evidence}`}>Why</a></p>)}
         {playing && guideText && <div class="guide">{guideText}</div>}
       </div>
 
       <div class="control-row">
-        <button class="vol-btn" aria-label="Volume" onClick={() => setShowVol(!showVol)}><Icon name="volume" /></button>
+        <button class="ctl" aria-label="Tune: volume, music, breathing, beat" onClick={() => setTune('music')}><span class="vol-btn"><Icon name="sliders" /></span><span class="ctl-l">Tune</span></button>
         {!running ? (
           <button class="play-btn" onClick={start} disabled={!!busy} aria-label="Start">
             <Icon name="play" />
@@ -356,15 +379,9 @@ export function Player(p: PlayerProps) {
             <Icon name="stop" />
           </button>
         )}
-        <button class="len-chip" onClick={() => setTune('length')} aria-label="Session length">
-          {running ? `${fmtTime(remaining)} left` : `${minutes} min`} <Icon name="chevdown" />
-        </button>
+        <button class="ctl" style="justify-self:end" onClick={() => setTune('length')} aria-label={`Length: ${minutes} minutes`}><span class="vol-btn"><Icon name="clock" /></span><span class="ctl-l">Length</span></button>
       </div>
-      {showVol && (
-        <div class="card tight" style="margin-top:4px">
-          <Slider label="Volume" value={Math.round(s.volume * 100)} min={5} max={100} step={1} format={(v) => `${v}%`} onInput={(v) => updateSettings({ volume: v / 100 })} />
-        </div>
-      )}
+      <p class="time-line">{running ? `${fmtTime(remaining)} left` : `${minutes} min`}</p>
       {busy && <p class="center muted small">{busy}</p>}
       {error && <div class="note danger-note">{error}</div>}
 
@@ -405,8 +422,8 @@ export function Player(p: PlayerProps) {
 
       <input ref={fileInput} type="file" accept="audio/*" hidden onChange={onFile} />
 
-      {engine.isIOS() && (
-        <p class="tiny faint">On iPhone and iPad, sound can stop when the screen locks. For long or overnight sessions, use "Save as file" in Tune and play it in a music app.</p>
+      {engine.lockMayStopSound() && (
+        <p class="tiny faint">On this iPhone or iPad version, sound may stop when the screen locks. Updating to iOS 17.5 or newer fixes it; or use "Save as file" in Tune and play it in a music app.</p>
       )}
 
       {tune && (
@@ -504,6 +521,7 @@ function TuneSheet(o: {
           <button class="btn small cream" onClick={o.onClose}>Done</button>
         </div>
         <p class="explain" style="margin:4px 0 0">Changes apply right away and are remembered.</p>
+        <Slider label="Volume" value={Math.round(settings.value.volume * 100)} min={5} max={100} step={1} format={(v) => `${v}%`} onInput={(v) => updateSettings({ volume: v / 100 })} />
       </div>
 
       <div class="sheet-section" id="tune-music">

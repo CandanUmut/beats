@@ -2,7 +2,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { signal } from '@preact/signals';
 import { useEffect } from 'preact/hooks';
 import { EVIDENCE_BY_ID, gradeLevel, type Grade } from '../data/evidence';
-import { go, back } from './router';
+import { go, back, isDeep, route } from './router';
 import { regionById, DIRECTORY } from '../data/helplines';
 import { settings } from '../data/settings';
 import { CRISIS } from '../data/safety';
@@ -63,20 +63,22 @@ export function TopBar({ title, onBack, right }: { title?: string; onBack?: () =
         <Icon name="back" />
       </button>
       <div class="title">{title}</div>
-      <button class="icon-btn" aria-label="Home" onClick={() => go('/')}>
-        <Icon name="home" />
-      </button>
-      {right ?? <HelpButton />}
+      {isDeep() && !route.value.startsWith('/m/') && (
+        <button class="icon-btn" aria-label="Home" onClick={() => go('/')}>
+          <Icon name="home" />
+        </button>
+      )}
+      {right ?? <HelpButton compact />}
     </header>
   );
 }
 
 export const helpOpen = signal(false);
 
-export function HelpButton() {
+export function HelpButton({ compact }: { compact?: boolean }) {
   return (
-    <button class="support-btn" onClick={() => (helpOpen.value = true)} aria-label="Talk to someone">
-      <Icon name="heart" /> Support
+    <button class={`support-btn${compact ? ' compact' : ''}`} onClick={() => (helpOpen.value = true)} aria-label="Support: talk to someone">
+      <Icon name="heart" />{!compact && ' Support'}
     </button>
   );
 }

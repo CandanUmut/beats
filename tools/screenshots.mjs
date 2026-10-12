@@ -26,7 +26,7 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await shot('01-safety');
   await page.click('text=I understand, continue');
   await shot('04-level');
-  await page.click('text=Start');
+  await page.click('text=Choose how I want to feel');
   await page.waitForSelector('.mood');
   await shot('05-home');
   await page.waitForTimeout(5000);

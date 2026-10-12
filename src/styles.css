@@ -141,6 +141,8 @@ button { font: inherit; color: inherit; }
   cursor: pointer; white-space: nowrap;
 }
 .support-btn svg { width: 17px; height: 17px; color: var(--clay); }
+.support-btn.compact { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+.support-btn.compact svg { width: 19px; height: 19px; }
 
 /* --- Type ------------------------------------------------------------------- */
 h1, h2, h3, .serif { font-family: var(--serif); font-weight: 500; letter-spacing: -0.005em; }
@@ -601,10 +603,11 @@ h1 em { display: block; text-wrap: balance; }
   content: ''; position: absolute; left: 4%; right: 4%; bottom: 6px; height: 10px; border-radius: 50%;
   background: radial-gradient(closest-side, rgba(0, 0, 0, 0.28), transparent);
 }
-.cat { position: absolute; left: 0; bottom: 4px; width: 96px; height: 72px; padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; touch-action: pan-y; will-change: transform; -webkit-tap-highlight-color: transparent; }
+.cat { position: absolute; left: 0; bottom: 4px; width: 100px; height: 75px; padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; touch-action: pan-y; will-change: transform; -webkit-tap-highlight-color: transparent; }
 .cat svg { display: block; overflow: visible; }
 .cat:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
 .cat-bowl { position: absolute; bottom: 6px; width: 34px; height: 14px; pointer-events: none; }
+.cat-fly { position: absolute; width: 20px; height: 16px; pointer-events: none; }
 .cat-heart { position: absolute; width: 16px; height: 14px; pointer-events: none; transform: translateX(-50%); }
 @media (min-width: 720px) { .cat-floor { max-width: 640px; } }
 .in-session .cat-floor { opacity: 0.85; }
@@ -616,3 +619,57 @@ h1 em { display: block; text-wrap: balance; }
 .view-pill svg { width: 14px; height: 14px; }
 .mood { min-height: 160px; justify-content: flex-end; }
 .mood .name { margin-top: 0; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5); }
+
+/* Painting with a music-box sill under it */
+.scene-frame { width: 100%; }
+.scene-frame.with-strip .instrument-canvas.scene { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 0; }
+.music-strip {
+  display: block; width: 100%; height: 52px; padding: 6px 10px 8px; margin: 0;
+  background: linear-gradient(180deg, #3a2c22, #261d17);
+  border: 1px solid var(--line); border-top: 1px solid rgba(255, 220, 180, 0.12);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: inset 0 1px 0 rgba(255, 230, 200, 0.08), inset 0 -6px 12px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.music-strip canvas { display: block; width: 100%; height: 100%; }
+.music-strip.strings { height: 44px; }
+.music-strip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Player: the title opens the music; time sits under Play */
+.np-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; margin: 0 auto; padding: 4px 12px; border: 0; background: none; color: inherit; cursor: pointer; border-radius: 12px; max-width: 100%; }
+.np-btn .t { font-family: var(--serif); font-size: 18px; font-weight: 500; line-height: 1.25; display: inline-flex; align-items: center; gap: 4px; }
+.np-btn .t svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
+.np-btn .c { color: var(--muted); font-size: 13.5px; }
+.np-btn:hover .t svg, .np-btn:focus-visible .t svg { color: var(--accent); }
+.time-line { text-align: center; margin: 2px 0 0; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* Bedtime dimming: everything fades nearly to black; the painting still breathes faintly. */
+body::after { content: ''; position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 200; transition: opacity 3s ease; }
+html.night-dim body::after { opacity: 0.84; }
+.rate-card { margin-top: 10px; }
+
+/* Round 6 polish: calmer type, one italic voice, steadier tiles */
+.eyebrow { font-family: var(--sans); font-style: normal; font-size: 13.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); }
+.mix-card .eyebrow { text-transform: uppercase; font-size: 11.5px; letter-spacing: 0.1em; }
+.fact-line { font-family: var(--sans); font-style: normal; font-size: 15px; max-width: 34ch; margin: 10px auto 0; }
+.guide { font-style: normal; font-size: 17px; }
+.mood .scene-thumb { filter: none; }
+.mood::after { background: linear-gradient(180deg, transparent 42%, rgba(18, 14, 12, 0.8) 86%); }
+.mood > div:last-child { min-height: calc(23px * 1.1 + 4px + 13.5px * 1.35 * 2); display: flex; flex-direction: column; justify-content: flex-end; }
+.stage { gap: 0; }
+.now-playing { margin-top: 16px; }
+.control-row { margin: 16px 0 4px; }
+.set-head { font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 26px 4px 10px; }
+
+/* Round 7: session fits above the cat; labelled controls; aligned tiles */
+.in-session .instrument-canvas.scene, .in-session .instrument-canvas { height: min(40dvh, 380px); }
+.in-session .session-head { display: none; }
+.in-session .cat-floor { pointer-events: none; }
+.in-session .cat-floor .cat { pointer-events: none; }
+.ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; }
+.ctl .vol-btn { pointer-events: none; }
+.ctl-l { font-size: 12px; font-weight: 650; color: var(--muted); }
+.control-row .ctl:first-child { justify-self: start; }
+.mood > div:last-child { min-height: 0; display: block; }
+.mood .line { min-height: calc(13.5px * 1.35 * 2); }
+.canvas-hint.on-scene { top: 22%; left: 9%; right: 9%; padding: 0 6px; }

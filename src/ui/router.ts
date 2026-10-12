@@ -27,3 +27,8 @@ export function back(fallback = '/'): void {
   }
   else go(fallback);
 }
+
+/** True when Back would not already lead home (so a Home button is worth showing). */
+export function isDeep(): boolean {
+  return depth > 1;
+}

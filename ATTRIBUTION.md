@@ -13,6 +13,9 @@ All built-in sounds are generated at runtime by this project's own code (MIT):
 | Lo-fi chill, Aurora, Lullaby, Warm strings | Generated styles (`src/audio/dsp/styles.ts`) | MIT (own code) |
 | Reverie | Generated piano score played on the piano samples below (`src/music/generative.ts`) | MIT (own code) |
 
+## Cat sounds
+- **Small mewing of a cat (#0098)** and **Cat purr (#0436)** by **Joseph Sardin**, BigSoundBank. **CC0 1.0** (public domain dedication). Sources: https://bigsoundbank.com/small-mewing-of-a-cat-s0098.html and https://bigsoundbank.com/cat-purr-s0436.html. Files: `public/samples/cat/`. The four mews were cut from #0098 (high-passed at 120 Hz, faded, leveled); the purr is 8 s of #0436, band-limited to 35–2200 Hz with light noise reduction. If they can't load, the app falls back to a synthesized purr and meow (own code, MIT).
+
 ## Piano samples
 - **Upright Piano KW (small), version 2019-07-03**, FreePats project. Recorded from a Kawai upright by Gonzalo and Roberto (roberto@zenvoid.org). **CC0 1.0** (public domain dedication). Source: https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html#UprightKW. Files: `public/samples/piano-kw/` (sample names with `#` renamed to `s`, e.g. `D#3vH.flac` -> `Ds3vH.flac`; original readme and CC0 text included).
 

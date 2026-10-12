@@ -1,6 +1,6 @@
 // Offline support: network-first for pages, cache-first for hashed assets.
-const CACHE = 'steady-v1';
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
+const CACHE = 'steady-v2';
+const CORE = ['./', './index.html', './manifest.webmanifest', './favicon-64.png', './apple-touch-icon.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));

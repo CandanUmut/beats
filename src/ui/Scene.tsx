@@ -28,7 +28,8 @@ export function SceneView({ scene, playing, breathing, pattern, hint, children }
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       const t = (now - t0) / 1000;
       const bt = playing ? engine.sessionTime() : t;
-      drawScene(c, scene, W, H, { t, breath: breathAt(pattern, bt).level, breathing, still });
+      const st = breathAt(pattern, bt);
+      drawScene(c, scene, W, H, { t, breath: st.level, inhale: st.phase === 'in' || st.phase === 'topup', breathing, still });
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
