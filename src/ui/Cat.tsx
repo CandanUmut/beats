@@ -55,17 +55,21 @@ export function Cat() {
 
   const sounds = s.catSounds;
   const vol = s.volume;
+  const still = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   // Behaviour loop.
   useEffect(() => {
     let raf = 0;
     let prev = performance.now();
+    let drawn = 0;
     const pick = (now: number) => {
       const c = st.current;
       const fw = floor.current?.clientWidth ?? 360;
       const r = Math.random();
       const after = (sec: number) => now / 1000 + sec;
-      if (r < 0.28) Object.assign(c, { pose: 'sit', until: after(5 + Math.random() * 5) });
+      // Reduced motion: no wandering, just sitting and napping.
+      if (still) Object.assign(c, r < 0.6 ? { pose: 'sit', until: after(20) } : { pose: 'sleep', until: after(40) });
+      else if (r < 0.28) Object.assign(c, { pose: 'sit', until: after(5 + Math.random() * 5) });
       else if (r < 0.42) Object.assign(c, { pose: 'groom', until: after(4) });
       else if (r < 0.64) Object.assign(c, { pose: 'walk', targetX: 10 + Math.random() * (fw - W - 20), next: 'sit' });
       else if (r < 0.72) Object.assign(c, { pose: 'yawn', until: after(2.6) });
@@ -109,12 +113,14 @@ export function Cat() {
       c.x = Math.max(0, Math.min(fw - W, c.x));
       if (Math.random() < dt / 4) blink.current = sec;
       hearts.current = hearts.current.filter((h) => sec - h.born < 1.6);
-      force((n) => (n + 1) % 1e6);
+      // Redraw at a rate that fits what he's doing: smooth when walking, slow when asleep.
+      const fps = c.pose === 'walk' || hearts.current.length ? 60 : c.pose === 'sleep' ? 8 : 24;
+      if (now - drawn >= 1000 / fps - 4) { drawn = now; force((n) => (n + 1) % 1e6); }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [sounds, vol]);
+  }, [sounds, vol, still]);
 
   // Show you around: walk to the main thing on each screen.
   useEffect(() => {
@@ -129,7 +135,9 @@ export function Cat() {
       const fr = fl.getBoundingClientRect();
       const target = er.left + er.width / 2 - fr.left - W / 2;
       guided.current = r;
-      Object.assign(st.current, { pose: 'walk', targetX: target, next: 'look', since: performance.now() / 1000 });
+      const sec = performance.now() / 1000;
+      if (still) Object.assign(st.current, { pose: 'look', x: target, targetX: null, until: sec + 6, since: sec });
+      else Object.assign(st.current, { pose: 'walk', targetX: target, next: 'look', since: sec });
     }, 1400);
     return () => clearTimeout(id);
   }, [route.value]);
@@ -139,8 +147,10 @@ export function Cat() {
     const sec = performance.now() / 1000;
     if (c.pose !== 'sleep') Object.assign(c, { pose: 'petted', until: sec + 2.6, targetX: null, since: sec });
     else c.until = Math.max(c.until, sec + 8);
-    if (sounds && sec - lastPurr.current > 2.4) { lastPurr.current = sec; void purr(2.6, vol); }
-    if (sounds && c.pose !== 'sleep' && e.type === 'pointerdown' && Math.random() < 0.3 && sec - lastMeow.current > 4) { lastMeow.current = sec; void meow(vol); }
+    // No cat sounds over a running session.
+    const quiet = !sounds || document.documentElement.classList.contains('in-session');
+    if (!quiet && sec - lastPurr.current > 2.4) { lastPurr.current = sec; void purr(2.6, vol); }
+    if (!quiet && c.pose !== 'sleep' && e.type === 'pointerdown' && Math.random() < 0.3 && sec - lastMeow.current > 4) { lastMeow.current = sec; void meow(vol); }
     if (hearts.current.length < 6) hearts.current.push({ id: Math.random(), x: c.x + W / 2 + (Math.random() - 0.5) * 30, born: sec });
   }
 
@@ -149,7 +159,7 @@ export function Cat() {
   const sec = t.current;
   const fw = floor.current?.clientWidth ?? 360;
   return (
-    <div class="cat-floor" ref={floor} aria-hidden="false">
+    <div class="cat-floor" ref={floor}>
       <Bowl x={bowlX(fw)} />
       <div
         class="cat"
@@ -159,7 +169,7 @@ export function Cat() {
         style={{ transform: `translateX(${c.x}px)` }}
         onPointerDown={pet as unknown as (e: Event) => void}
         onPointerMove={((e: PointerEvent) => { if (e.buttons || e.pointerType === 'mouse') pet(e); }) as unknown as (e: Event) => void}
-        onKeyDown={(e) => { if (e.key === 'Enter') pet(new PointerEvent('pointerdown')); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pet(new PointerEvent('pointerdown')); } }}
       >
         <svg viewBox="0 0 120 90" width={W} height={W * 0.75} style={{ transform: `scaleX(${c.dir})` }}>
           <CatBody pose={c.pose} t={sec} since={c.since} blinking={sec - blink.current < 0.16} />
