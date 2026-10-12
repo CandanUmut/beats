@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import { MOODS, MOOD_BY_ID } from '../../data/moods';
 import { settings, isCustom, recipeFor } from '../../data/settings';
-import { HelpButton, Icon, MoodGlyph, helpOpen } from '../components';
+import { HelpButton, Icon, helpOpen } from '../components';
 import { go } from '../router';
 import { allSessions, nudges, type Nudge } from '../../data/usage';
 import { shortTitle } from '../Player';
+import { SceneThumb } from '../Scene';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -43,8 +44,9 @@ export function Home() {
       <div class="mood-grid">
         {MOODS.map((m) => (
           <button class={`mood accent-${m.accent}`} onClick={() => go(`/m/${m.id}`)}>
+            <SceneThumb scene={recipeFor(m.id).scene ?? 'forest'} />
             {isCustom(m.id) && <span class="mine">Yours</span>}
-            <MoodGlyph id={m.id} />
+            <span />
             <div>
               <div class="name">{m.name}</div>
               <div class="line">{m.line}</div>

@@ -36,7 +36,7 @@ function LabHome() {
   useEffect(() => { listPlans().then(setPlans); }, []);
   return (
     <div class="accent-honey">
-      <TopBar title="Experiment Lab" />
+      <TopBar title="Lab" />
       <h1>Does it work for you?</h1>
       <p class="lead">Test one part at a time, with everything else kept the same. Sessions are randomized and, where possible, blinded: you won't know which version you got until the end.</p>
       <button class="btn primary block" onClick={() => go('/lab/new')}><Icon name="flask" size={18} /> New experiment</button>
@@ -333,7 +333,9 @@ function LabSession({ id }: { id: string }) {
   const next = nextSession(plan, trials);
   if (!next && step !== 'saved') return <div class="accent-honey"><TopBar title="Lab session" /><p>All sessions are done. <a href={`#/lab/${plan.id}/results`}>See results</a></p></div>;
   const f = FACTORS[plan.factor];
-  const scales = SCALES;
+  // The scale that matters for this experiment comes first; the rest are optional.
+  const primary = ({ calm_up: 'calm', anger_down: 'anger', craving_down: 'craving', focus_up: 'focus', sleepy_up: 'sleepiness', rt_post: 'focus' } as const)[plan.outcome];
+  const scales = [...SCALES.filter((x) => x.id === primary), ...SCALES.filter((x) => x.id !== primary)];
 
   async function startPlay() {
     if (!plan || !next) return;
@@ -376,23 +378,31 @@ function LabSession({ id }: { id: string }) {
 
   const isMain = next?.phase === 'main';
   const breathingOn = next ? armParams(plan, next.arm).params.breath.enabled : false;
-  const allPre = scales.every((s) => pre[s.id] !== undefined);
-  const allPost = scales.every((s) => post[s.id] !== undefined);
+  const allPre = pre[primary] !== undefined;
+  const allPost = post[primary] !== undefined;
 
   return (
     <div class="accent-honey">
-      <TopBar title={isMain ? `Session ${next!.index - plan.baseline + 1} of ${plan.pairs * 2}` : 'Baseline session'} onBack={() => go(`/lab/${plan.id}`)} />
+      <TopBar title={isMain ? `Session ${next!.index - plan.baseline + 1}` : 'Baseline'} onBack={() => go(`/lab/${plan.id}`)} />
       {step === 'pre' && (
         <>
           <h1>Before you start</h1>
           <p class="lead">Rate how you feel right now. Same headphones, same volume as always.</p>
           <div class="card">
-            {scales.map((s) => (
+            {scales.slice(0, 1).map((s) => (
               <div style="margin-bottom:8px">
                 <div class="field-head"><span>{s.label}</span></div>
                 <Rating label={s.label} value={pre[s.id] ?? null} onChange={(v) => setPre({ ...pre, [s.id]: v })} low={s.low} high={s.high} />
               </div>
             ))}
+            <details class="more"><summary>Rate more (optional)</summary>
+              {scales.slice(1).map((s) => (
+                <div style="margin-bottom:8px">
+                  <div class="field-head"><span>{s.label}</span></div>
+                  <Rating label={s.label} value={pre[s.id] ?? null} onChange={(v) => setPre({ ...pre, [s.id]: v })} low={s.low} high={s.high} />
+                </div>
+              ))}
+            </details>
           </div>
           <VolumeCard />
           <div class="note warn small">{STOP_DAY}</div>
@@ -417,12 +427,20 @@ function LabSession({ id }: { id: string }) {
           <h1>How do you feel now?</h1>
           {stoppedEarly.current && <div class="note warn small">Session stopped early. It will be saved but left out of the analysis.</div>}
           <div class="card">
-            {scales.map((s) => (
+            {scales.slice(0, 1).map((s) => (
               <div style="margin-bottom:8px">
                 <div class="field-head"><span>{s.label}</span></div>
                 <Rating label={s.label} value={post[s.id] ?? null} onChange={(v) => setPost({ ...post, [s.id]: v })} low={s.low} high={s.high} />
               </div>
             ))}
+            <details class="more"><summary>Rate more (optional)</summary>
+              {scales.slice(1).map((s) => (
+                <div style="margin-bottom:8px">
+                  <div class="field-head"><span>{s.label}</span></div>
+                  <Rating label={s.label} value={post[s.id] ?? null} onChange={(v) => setPost({ ...post, [s.id]: v })} low={s.low} high={s.high} />
+                </div>
+              ))}
+            </details>
           </div>
           {plan.pvt && !pvt && <Pvt onDone={setPvt} />}
           {plan.pvt && pvt && <p class="small muted">Reaction time saved: {Number.isFinite(pvt.medianMs) ? `${pvt.medianMs.toFixed(0)} ms median` : 'not enough taps'}.</p>}

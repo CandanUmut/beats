@@ -1,5 +1,6 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { signal } from '@preact/signals';
+import { useEffect } from 'preact/hooks';
 import { EVIDENCE_BY_ID, gradeLevel, type Grade } from '../data/evidence';
 import { go, back } from './router';
 import { regionById, DIRECTORY } from '../data/helplines';
@@ -35,6 +36,8 @@ const paths: Record<string, JSX.Element> = {
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
   spark: <path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />,
   headphones: <><path d="M4 15v-2.5a8 8 0 0 1 16 0V15" /><rect x="3.5" y="14" width="4" height="6" rx="1.5" /><rect x="16.5" y="14" width="4" height="6" rx="1.5" /></>,
+  eye: <><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></>,
+  home: <path d="M4 11.5L12 5l8 6.5M6.5 10v9h11v-9M10 19v-5h4v5" />,
   volume: <><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></>,
   chevdown: <path d="M6 9.5l6 6 6-6" />,
   user: <><circle cx="12" cy="8" r="3.5" /><path d="M5 20c1-4 4-6 7-6s6 2 7 6" /></>,
@@ -60,6 +63,9 @@ export function TopBar({ title, onBack, right }: { title?: string; onBack?: () =
         <Icon name="back" />
       </button>
       <div class="title">{title}</div>
+      <button class="icon-btn" aria-label="Home" onClick={() => go('/')}>
+        <Icon name="home" />
+      </button>
       {right ?? <HelpButton />}
     </header>
   );
@@ -112,13 +118,21 @@ export function HelpSheet() {
         </a>
       )}
       <div class="note danger-note">{CRISIS} Emergency: {region.emergency}.</div>
-      <p class="tiny faint">Change your region in Settings. Lines are listed in <code>src/data/helplines.ts</code>.</p>
+      <p class="tiny faint">Change your region in Settings.</p>
       <button class="btn block" onClick={() => (helpOpen.value = false)}>Close</button>
     </Sheet>
   );
 }
 
+let openSheets = 0;
+
 export function Sheet({ children, onClose }: { children: ComponentChildren; onClose: () => void }) {
+  // Lets the page (and the cat) know a sheet is up.
+  useEffect(() => {
+    openSheets++;
+    document.documentElement.classList.add('sheet-open');
+    return () => { if (--openSheets <= 0) { openSheets = 0; document.documentElement.classList.remove('sheet-open'); } };
+  }, []);
   return (
     <>
       <div class="sheet-backdrop" onClick={onClose} />

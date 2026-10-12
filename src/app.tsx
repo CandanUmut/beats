@@ -2,6 +2,7 @@ import { useEffect } from 'preact/hooks';
 import { route, go } from './ui/router';
 import { settings, settingsLoaded, loadSettings } from './data/settings';
 import { HelpSheet } from './ui/components';
+import { Cat } from './ui/Cat';
 import { Home } from './ui/screens/Home';
 import { Onboarding } from './ui/screens/Onboarding';
 import { Breathe, Calm, Focus, Move, Relax, Sleep, Urge } from './ui/screens/Flows';
@@ -39,10 +40,13 @@ export function App() {
   else if (r === '/recheck') page = <Onboarding recheck onDone={() => go('/settings')} />;
   else page = <Home />;
   return (
-    <div class={`app${r === '/' ? ' home' : ''}`} key={r}>
-      {page}
-      <HelpSheet />
-    </div>
+    <>
+      <div class={`app${r === '/' ? ' home' : ''}${settings.value.cat && settings.value.onboarded ? ' with-cat' : ''}`} key={r}>
+        {page}
+        <HelpSheet />
+      </div>
+      {settings.value.onboarded && <Cat />}
+    </>
   );
 }
 

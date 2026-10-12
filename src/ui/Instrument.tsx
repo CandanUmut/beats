@@ -2,6 +2,7 @@
 // glowing keys, or four strings that gently vibrate as the parts play.
 // Everything fades smoothly. Nothing flashes.
 
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 import * as engine from '../audio/engine';
 import type { VisualNote } from '../music/score';
@@ -31,7 +32,7 @@ function firstVisible(notes: VisualNote[], t: number): number {
   return lo;
 }
 
-export function InstrumentView({ kind, timeline, playing, breathing, pattern, onPart, showPill = true, hint, onSwitch }: {
+export function InstrumentView({ kind, timeline, playing, breathing, pattern, onPart, showPill = true, hint, onSwitch, switchLabel = 'Lamp' }: {
   kind: 'piano' | 'strings';
   timeline: Timeline | null;
   playing: boolean;
@@ -42,6 +43,7 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
   hint?: string | null;
   /** Switch to the lamp view. */
   onSwitch?: () => void;
+  switchLabel?: ComponentChildren;
   onPart?: (title: string, composer: string) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -147,7 +149,7 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
     <div class="instrument">
       <canvas ref={canvas} class={`instrument-canvas ${kind}${breathing ? '' : ' compact'}`} aria-label={kind === 'piano' ? 'Piano animation' : 'Strings animation'} role="img" />
       {hint && <div class="canvas-hint" style={{ opacity: playing ? 0 : 1 }} dangerouslySetInnerHTML={{ __html: hint }} />}
-      {onSwitch && <button class="view-pill" onClick={onSwitch}>Lamp</button>}
+      {onSwitch && <button class="view-pill" onClick={onSwitch}>{switchLabel}</button>}
       {showPill && (
         <div class="breath-pill" ref={pill}>
           <span class="breath-dot" ref={dot} />
@@ -165,8 +167,8 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
  * watching the notes.
  */
 function drawTide(c: CanvasRenderingContext2D, W: number, _H: number, floor: number, level: number, accent: string) {
-  // Band height follows the breath: about 18% of the stage when empty, 82% when full.
-  const top = floor - (0.18 + 0.64 * level) * floor;
+  // Band height follows the breath: from 18% to 70% of the stage.
+  const top = floor - (0.18 + 0.52 * level) * floor;
   const wave = (x: number) => top + 5 * Math.sin((x / W) * Math.PI * 2 + level * 2.5);
   c.beginPath();
   c.moveTo(0, floor);
@@ -174,10 +176,11 @@ function drawTide(c: CanvasRenderingContext2D, W: number, _H: number, floor: num
   c.lineTo(W, wave(W));
   c.lineTo(W, floor);
   c.closePath();
+  // Strongest just under the edge, fading toward the keys so notes stay clear.
   const g = c.createLinearGradient(0, top, 0, floor);
   g.addColorStop(0, accent);
-  g.addColorStop(1, accent);
-  c.globalAlpha = 0.16 + 0.08 * level;
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.globalAlpha = 0.22;
   c.fillStyle = g;
   c.fill();
   // The bright edge of the tide, in ivory so it never looks like a note or a string.
@@ -327,9 +330,9 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
     }
     c.stroke();
     // Labels with a dark halo so the breath line never strikes them through.
-    c.globalAlpha = 0.85;
-    c.lineWidth = 4;
-    c.strokeStyle = 'rgba(20,18,16,.85)';
+    c.globalAlpha = 1;
+    c.lineWidth = 2;
+    c.strokeStyle = 'rgba(20,18,16,.6)';
     c.lineJoin = 'round';
     c.strokeText(STRING_NAMES[i], 10, y - gap * 0.3);
     c.fillStyle = 'rgba(239,230,216,0.7)';

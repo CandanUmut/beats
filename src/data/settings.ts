@@ -28,11 +28,16 @@ export interface Settings {
   lastMood: MoodId | null;
   /** How many times the "using headphones?" card has been shown. */
   hpPrompts: number;
+  /** The cat companion, and whether he makes sounds. */
+  cat: boolean;
+  catSounds: boolean;
+  /** Screens the cat has already shown you around (he does it once each). */
+  catGuided: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
-  volume: 0.6,
+  volume: 0.45,
   breath: DEFAULT_BREATH,
   swellDb: 4,
   vibrate: false,
@@ -46,6 +51,9 @@ export const DEFAULT_SETTINGS: Settings = {
   recipes: {},
   lastMood: null,
   hpPrompts: 0,
+  cat: true,
+  catSounds: true,
+  catGuided: [],
 };
 
 export const settings = signal<Settings>(DEFAULT_SETTINGS);
