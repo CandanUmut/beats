@@ -14,7 +14,7 @@ export interface Timeline {
 }
 
 const isBlack = (m: number) => [1, 3, 6, 8, 10].includes(m % 12);
-const PHASE: Record<BreathPhase, string> = { in: 'Breathe in', topup: 'A little more', hold: 'Hold', out: 'Breathe out' };
+const PHASE: Record<BreathPhase, string> = { in: 'Breathe in', topup: 'Sip more', hold: 'Hold', out: 'Breathe out' };
 
 function cssVar(el: Element, name: string, fallback: string): string {
   return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
@@ -43,6 +43,7 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
   const pill = useRef<HTMLDivElement>(null);
   const dot = useRef<HTMLSpanElement>(null);
   const label = useRef<HTMLSpanElement>(null);
+  const num = useRef<HTMLSpanElement>(null);
   const partRef = useRef('');
 
   useEffect(() => {
@@ -51,7 +52,7 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
     const ctx2 = cv.getContext('2d');
     if (!ctx2) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const accent = cssVar(cv, '--accent', '#ae9ff5');
+    const accent = cssVar(cv, '--accent', '#e2a75e');
     const glow = new Map<number, number>(); // midi -> 0..1 (smoothed)
     let raf = 0;
     let last = performance.now();
@@ -113,16 +114,18 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
         glow.set(m, g + (target - g) * k);
       }
 
+      const bt = playing ? engine.sessionTime() : (now - t0) / 1000;
+      const bs = breathAt(pattern, bt);
+      if (breathing) drawTide(ctx2, W, H, kind === 'piano' ? H - Math.min(78, H * 0.3) : H, bs.level, accent);
       if (kind === 'piano') drawPiano(ctx2, W, H, { lo, hi, whites, glow, visible, mt, look, accent, reduce: !!reduce });
       else drawStrings(ctx2, W, H, { glow, accent, time: (now - t0) / 1000, reduce: !!reduce });
 
       // Breathing pill and now-playing label.
       if (pill.current && dot.current) {
-        const bt = playing ? engine.sessionTime() : (now - t0) / 1000;
-        const st = breathAt(pattern, bt);
         pill.current.style.opacity = breathing ? '1' : '0';
-        if (label.current) label.current.textContent = PHASE[st.phase];
-        dot.current.style.transform = `scale(${0.45 + 0.55 * st.level})`;
+        if (label.current) label.current.textContent = PHASE[bs.phase];
+        if (num.current) num.current.textContent = String(Math.max(1, Math.ceil(bs.remaining)));
+        dot.current.style.transform = `scale(${0.4 + 0.6 * bs.level})`;
       }
       if (onPart && timeline?.parts?.length && playing) {
         let cur = timeline.parts[0];
@@ -141,9 +144,37 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
       <div class="breath-pill" ref={pill}>
         <span class="breath-dot" ref={dot} />
         <span ref={label}>Breathe in</span>
+        <span class="num" ref={num} />
       </div>
     </div>
   );
+}
+
+/**
+ * The tide: a soft wash of light that rises as you breathe in and sinks as you
+ * breathe out, with a bright line at its edge. Easy to follow without
+ * watching the notes.
+ */
+function drawTide(c: CanvasRenderingContext2D, W: number, _H: number, floor: number, level: number, accent: string) {
+  const top = floor - (0.12 + 0.78 * level) * floor;
+  const g = c.createLinearGradient(0, top, 0, floor);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.02, accent);
+  g.addColorStop(1, accent);
+  c.globalAlpha = 0.1 + 0.06 * level;
+  c.fillStyle = g;
+  c.fillRect(0, top, W, floor - top);
+  // The edge of the tide: a gentle curved line.
+  c.globalAlpha = 0.55;
+  c.strokeStyle = accent;
+  c.lineWidth = 2;
+  c.beginPath();
+  for (let x = 0; x <= W; x += 6) {
+    const y = top + 4 * Math.sin((x / W) * Math.PI * 2 + level * 2);
+    if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
+  }
+  c.stroke();
+  c.globalAlpha = 1;
 }
 
 function roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -214,7 +245,7 @@ function drawPiano(
   for (const m of o.whites) {
     const [x, w] = xOf(m);
     const g = o.glow.get(m) ?? 0;
-    c.fillStyle = '#e9ecf5';
+    c.fillStyle = '#efe6d8';
     roundRect(c, x + 0.75, top + 1, w - 1.5, keyH - 2, 4);
     c.fill();
     if (g > 0.01) {
@@ -229,7 +260,7 @@ function drawPiano(
     if (!isBlack(m)) continue;
     const [x, w] = xOf(m);
     const g = o.glow.get(m) ?? 0;
-    c.fillStyle = '#1b2036';
+    c.fillStyle = '#2a241f';
     roundRect(c, x, top, w, keyH * 0.62, 3);
     c.fill();
     if (g > 0.01) {
@@ -242,8 +273,8 @@ function drawPiano(
   }
   // A soft shade at the top of the keys, like a key slip.
   const shade = c.createLinearGradient(0, top, 0, top + 10);
-  shade.addColorStop(0, 'rgba(10,14,28,0.55)');
-  shade.addColorStop(1, 'rgba(10,14,28,0)');
+  shade.addColorStop(0, 'rgba(20,18,16,0.55)');
+  shade.addColorStop(1, 'rgba(20,18,16,0)');
   c.fillStyle = shade;
   c.fillRect(0, top, W, 10);
 }
@@ -282,7 +313,7 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
     if (a > 0.05 && !o.reduce) {
       const bx = W * (0.55 + 0.18 * Math.sin(o.time * 0.6 + i));
       c.globalAlpha = 0.5 * a;
-      c.strokeStyle = '#e9ecf5';
+      c.strokeStyle = '#efe6d8';
       c.lineWidth = 2;
       c.beginPath();
       c.moveTo(bx - 70, y - 14);
@@ -290,7 +321,7 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
       c.stroke();
     }
     c.globalAlpha = 0.55;
-    c.fillStyle = '#98a2c0';
+    c.fillStyle = '#b9ad9c';
     c.fillText(STRING_NAMES[i], 8, y - gap * 0.32);
   }
   c.globalAlpha = 1;

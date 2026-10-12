@@ -2,7 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { EVIDENCE, EVIDENCE_BY_ID, GRADE_KEY, MYTHS, type Grade } from '../../data/evidence';
 import { DISCLAIMER, STOP_DAY, STOP_STUDY, ASK_FIRST, NEVER_WHILE } from '../../data/safety';
 import { REGIONS } from '../../data/helplines';
-import { settings, updateSettings } from '../../data/settings';
+import { settings, updateSettings, isCustom, resetRecipe } from '../../data/settings';
+import { MOODS } from '../../data/moods';
 import { allSessions, listenedHoursLast7Days, weeklyBudgetHours, type SessionRecord } from '../../data/usage';
 import { allCheckIns, allDiary, saveDiary, hoursBetween, type CheckIn, type DiaryEntry } from '../../data/checkins';
 import { uid, db } from '../../data/db';
@@ -15,9 +16,9 @@ import { downloadText, toCsv } from '../../lib/csv';
 export function EvidenceList() {
   return (
     <div class="accent-relax">
-      <TopBar title="Evidence" />
-      <h1>What the science says</h1>
-      <p class="lead">Every part of this app has a grade. Tap any one for the studies, including the ones that found nothing.</p>
+      <TopBar title="Research" />
+      <h1>The research <em>behind it</em></h1>
+      <p class="lead">Every part of Steady comes from published studies on breathing, music, sound and habits. Here is what each one found, the strong results and the null ones, so you can decide for yourself.</p>
       <div class="card">
         {EVIDENCE.map((e) => (
           <button class="row-link" onClick={() => go(`/evidence/${e.id}`)}>
@@ -136,14 +137,20 @@ export function Settings() {
         <p class="tiny faint" style="margin:0">Based on the WHO-ITU safe-listening reference (80 dB for 40 h a week; every +3 dB halves it). A browser can't measure how loud it really is in your ears, so this assumes a conservative level.</p>
       </div>
       <div class="card">
-        <h3 style="margin-top:0">Beats <span class="exp-tag">Experimental</span></h3>
-        <Toggle label="Add beats automatically" hint="In Relax, Sleep, Focus and Breathe. Never in Calm down or Ride an urge." checked={s.autoBeats} onChange={(autoBeats) => updateSettings({ autoBeats })} />
-        <Seg value={s.beatMode} onChange={(beatMode) => updateSettings({ beatMode })} label="Beat type" options={[{ v: 'binaural', label: 'Binaural (headphones)' }, { v: 'pulse', label: 'Pulse (speakers OK)' }]} />
-        <p class="tiny faint" style="margin-bottom:0">The beat tone is tuned to the key of the music. Evidence that beats add anything on top of music is weak. The Lab can test it for you, blinded. <a href="#/evidence/beats-entrainment">Why?</a></p>
+        <h3 style="margin-top:0">Your moods</h3>
+        {MOODS.map((m) => (
+          <div class="field-head" style="align-items:center">
+            <span>{m.name} <span class="muted small">· {isCustom(m.id) ? 'tuned by you' : 'starting point'}</span></span>
+            <span>
+              <button class="link-btn" onClick={() => go(`/tune/${m.id}`)}>Taste test</button>
+              {isCustom(m.id) && <button class="link-btn" style="margin-left:12px" onClick={() => resetRecipe(m.id)}>Reset</button>}
+            </span>
+          </div>
+        ))}
       </div>
       <div class="card">
         <h3 style="margin-top:0">Visuals</h3>
-        <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Breathing circle' }]} />
+        <Seg value={s.visual} onChange={(visual) => updateSettings({ visual })} label="Visual" options={[{ v: 'instrument', label: 'Piano / strings' }, { v: 'circle', label: 'Lamp' }]} />
         <p class="tiny faint" style="margin-bottom:0">Animations move slowly and never flash. If your device asks for reduced motion, the falling notes are turned off.</p>
       </div>
       <div class="card">

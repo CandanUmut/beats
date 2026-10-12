@@ -2,30 +2,23 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import * as engine from '../audio/engine';
 import type { TrackId } from '../audio/dsp/synth';
-import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
-import { InstrumentView, type Timeline } from './Instrument';
 import { breathAt, patternFor, BPM_MIN, BPM_MAX, type BreathPattern, type BreathPhase } from '../audio/dsp/breath';
 import { DEFAULT_PARAMS, type MixParams, type SessionTiming } from '../audio/dsp/mixer';
-import { settings, updateSettings } from '../data/settings';
+import { settings, updateSettings, recipeFor, saveRecipe, resetRecipe, isCustom } from '../data/settings';
 import { recordSession } from '../data/usage';
 import { db } from '../data/db';
+import { BEAT_FEELS, MOOD_BY_ID, STRENGTH, feelName, type MoodId, type Recipe } from '../data/moods';
+import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
+import { InstrumentView, type Timeline } from './Instrument';
 import { Icon, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
-
-export type SoundChoice = string; // a sound id from the library, 'upload' or 'none'
+import { go } from './router';
 
 export interface PlayerProps {
-  goalId: string;
-  title: string;
-  /** Suggested sound ids (shown as quick picks). */
-  sounds: string[];
-  defaultSound: SoundChoice;
-  minutes: number;
-  minuteOptions: number[];
-  breathing: boolean;
+  moodId: MoodId;
   /** Sleep mode: long fade-out, no screen wake lock. */
   sleep?: boolean;
   allowNone?: boolean;
-  /** Text shown under the timer, given elapsed seconds. */
+  /** Text shown under the visual, given elapsed seconds. */
   guide?: (t: number, total: number) => string | null;
   /** Extra content under the controls, given elapsed seconds and playing state. */
   children?: (t: number, playing: boolean) => ComponentChildren;
@@ -33,17 +26,13 @@ export interface PlayerProps {
   autoStart?: boolean;
 }
 
-const PHASE_TEXT: Record<BreathPhase, string> = {
-  in: 'Breathe in',
-  topup: 'A little more',
-  hold: 'Hold',
-  out: 'Breathe out',
-};
+export const PHASE_TEXT: Record<BreathPhase, string> = { in: 'Breathe in', topup: 'Sip more', hold: 'Hold', out: 'Breathe out' };
 
-/** Breathing orb, animated straight from the session clock (no re-renders). */
+/** The lamp: a breathing light that grows as you breathe in, with a countdown. */
 export function Orb({ pattern, active, playing, label }: { pattern: BreathPattern; active: boolean; playing: boolean; label?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
+  const ph = useRef<HTMLSpanElement>(null);
+  const ct = useRef<HTMLSpanElement>(null);
   const t0 = useRef(performance.now());
   const lastPhase = useRef<BreathPhase | null>(null);
   useEffect(() => {
@@ -51,15 +40,11 @@ export function Orb({ pattern, active, playing, label }: { pattern: BreathPatter
     const frame = () => {
       const t = playing ? engine.sessionTime() : (performance.now() - t0.current) / 1000;
       const st = breathAt(pattern, t);
-      const el = ref.current;
-      if (el) {
-        const lvl = active ? st.level : 0.5;
-        el.style.setProperty('--s', String(0.58 + 0.42 * lvl));
-        el.style.setProperty('--g', String(lvl));
-      }
-      if (textRef.current) {
-        textRef.current.textContent = active ? PHASE_TEXT[st.phase] : label ?? '';
-      }
+      const lvl = active ? st.level : 0.55;
+      ref.current?.style.setProperty('--s', String(0.55 + 0.45 * lvl));
+      ref.current?.style.setProperty('--g', String(lvl));
+      if (ph.current) ph.current.textContent = active ? PHASE_TEXT[st.phase] : label ?? '';
+      if (ct.current) ct.current.textContent = active ? String(Math.max(1, Math.ceil(st.remaining))) : '';
       if (active && playing && st.phase !== lastPhase.current) {
         if (lastPhase.current && settings.value.vibrate && 'vibrate' in navigator) navigator.vibrate(st.phase === 'out' ? [20] : [35]);
         lastPhase.current = st.phase;
@@ -70,68 +55,65 @@ export function Orb({ pattern, active, playing, label }: { pattern: BreathPatter
     return () => cancelAnimationFrame(raf);
   }, [pattern, active, playing, label]);
   return (
-    <div class="orb-wrap">
-      <div class="orb-ring" />
-      <div class="orb" ref={ref} />
-      <div class="orb-label"><div ref={textRef} /></div>
+    <div class="lamp" ref={ref}>
+      <div class="lamp-halo" />
+      <div class="lamp-ring" />
+      <div class="lamp-orb" />
+      <div class="lamp-label"><div><span class="ph" ref={ph} /><span class="ct" ref={ct} /></div></div>
     </div>
   );
 }
 
-export type RhythmSettings = MixParams['rhythm'];
-
-export function buildParams(o: { breathing: boolean; pattern: BreathPattern; music: boolean; rhythm?: RhythmSettings }): MixParams {
-  const s = settings.value;
+/** Turn a recipe into mixer parameters. */
+export function recipeParams(r: Recipe, opts: { volume: number; music?: boolean }): MixParams {
+  const tonic = SOUND_BY_ID[r.sound]?.tonic ?? 9;
+  const st = STRENGTH[r.beat.strength];
   return {
     ...DEFAULT_PARAMS,
-    musicGainDb: o.music ? 0 : -80,
+    musicGainDb: opts.music === false || r.sound === 'none' ? -80 : 0,
     noiseGainDb: -80,
-    breath: { enabled: o.breathing, pattern: o.pattern, depthDb: s.swellDb },
-    rhythm: o.rhythm ?? { ...DEFAULT_PARAMS.rhythm, mode: 'off' },
-    volume: s.volume,
+    breath: { enabled: r.breathing, pattern: patternFor(r.breath), depthDb: r.breathing ? r.swellDb : 0 },
+    rhythm: r.beat.on
+      ? { mode: r.beat.type, rate: r.beat.rate, depth: st.depth, carrier: carrierFor(tonic), levelDb: st.levelDb }
+      : { ...DEFAULT_PARAMS.rhythm, mode: 'off' },
+    volume: opts.volume,
   };
 }
-
-/** Beat rates "used in studies" per goal (docs/RESEARCH.md, table 3.5). */
-const STUDY_RATE: Record<string, number> = { relax: 6, sleep: 2, focus: 14, breathe: 6 };
-const NO_RHYTHM: Record<string, string> = {
-  calm: 'Not offered here: there is no evidence beats help with anger, and one small study found anger went up. You can still test it in the Lab.',
-  urge: 'Not offered here: no study shows beats reduce urges. The timer and prompts are what help. You can test it in the Lab.',
-};
 
 export function timingFor(minutes: number, sleep?: boolean): SessionTiming {
   const duration = minutes * 60;
   return { duration, fadeIn: 4, fadeOut: sleep ? Math.max(60, duration - 5 * 60) : 8 };
 }
 
-/** The beat layer the app adds automatically for this goal and music (or off). */
-export function autoRhythm(goalId: string, soundId: string): RhythmSettings {
-  const s = settings.value;
-  const off: RhythmSettings = { ...DEFAULT_PARAMS.rhythm, mode: 'off', rate: STUDY_RATE[goalId] ?? 6 };
-  if (NO_RHYTHM[goalId] || !s.autoBeats) return off;
-  const tonic = SOUND_BY_ID[soundId]?.tonic ?? 9;
-  return { mode: s.beatMode, rate: STUDY_RATE[goalId] ?? 6, depth: 0.15, carrier: carrierFor(tonic), levelDb: -15 };
+/** Load a sound for playing; returns the engine key and the animation timeline. */
+export async function loadForPlay(id: string, onBusy?: (s: string | null) => void): Promise<{ key: string | null; visual: Timeline | null }> {
+  if (id === 'none') return { key: null, visual: null };
+  const it = SOUND_BY_ID[id];
+  if (!it) return { key: null, visual: null };
+  if (it.kind === 'score') onBusy?.('Loading the piano…');
+  else if (!(await hasCached(it.track!))) onBusy?.('Preparing sound… (first time only)');
+  try {
+    const loaded = await engine.loadSound(id);
+    return { key: loaded.key, visual: loaded.visual };
+  } finally {
+    onBusy?.(null);
+  }
 }
 
+type Section = 'music' | 'breathing' | 'beat' | 'length';
+
 export function Player(p: PlayerProps) {
+  const mood = MOOD_BY_ID[p.moodId];
   const s = settings.value;
-  const initial = (() => {
-    const last = s.lastSound[p.goalId];
-    if (last && (SOUND_BY_ID[last] || (last === 'none' && p.allowNone))) return last;
-    return p.defaultSound;
-  })();
-  const [sound, setSound] = useState<SoundChoice>(initial);
+  const [recipe, setRecipeState] = useState<Recipe>(() => recipeFor(p.moodId));
   const [upload, setUpload] = useState<engine.UploadInfo | null>(null);
-  const [breathing, setBreathing] = useState(p.breathing);
-  const [minutes, setMinutes] = useState(p.minutes);
   const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [adjust, setAdjust] = useState(false);
+  const [tune, setTune] = useState<Section | null>(null);
   const [library, setLibrary] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [running, setRunning] = useState(false);
-  const [rhythm, setRhythm] = useState<RhythmSettings>(() => autoRhythm(p.goalId, initial));
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [nowPlaying, setNowPlaying] = useState<{ title: string; composer: string } | null>(null);
   const startedAt = useRef(0);
@@ -139,7 +121,9 @@ export function Player(p: PlayerProps) {
   const wake = useRef<{ release: () => Promise<void> } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const pattern = useMemo(() => patternFor(s.breath), [s.breath.mode, s.breath.bpm, s.breath.ratio]);
+  const sound = recipe.sound;
+  const pattern = useMemo(() => patternFor(recipe.breath), [recipe.breath.mode, recipe.breath.bpm, recipe.breath.ratio]);
+  const minutes = recipe.minutes;
   const total = minutes * 60;
   const status = engine.status.value;
   const playing = running && (status === 'playing' || status === 'stopping');
@@ -147,20 +131,26 @@ export function Player(p: PlayerProps) {
   const instrument = item && item.visual !== 'orb' ? item.visual : null;
   const showInstrument = !!instrument && s.visual === 'instrument';
 
-  // Keep the timer text fresh.
+  function setRecipe(r: Recipe) {
+    setRecipeState(r);
+    if (r.sound !== 'upload') saveRecipe(p.moodId, r);
+  }
+
+  useEffect(() => {
+    updateSettings({ lastMood: p.moodId });
+  }, []);
+
   useEffect(() => {
     if (!running) return;
     const id = setInterval(() => setElapsed(engine.sessionTime()), 250);
     return () => clearInterval(id);
   }, [running]);
 
-  // Push parameter changes to the live session.
   useEffect(() => {
     if (!running) return;
-    engine.updateParams(buildParams({ breathing, pattern, music: sound !== 'none', rhythm }));
-  }, [running, breathing, pattern, sound, s.volume, s.swellDb, rhythm]);
+    engine.updateParams(recipeParams(recipe, { volume: s.volume }));
+  }, [running, recipe, s.volume]);
 
-  // Stop the sound if the screen is left mid-session.
   useEffect(() => () => {
     if (running) void finish(true);
   }, [running]);
@@ -169,22 +159,13 @@ export function Player(p: PlayerProps) {
     if (p.autoStart) void start();
   }, []);
 
-  async function keyFor(choice: SoundChoice): Promise<string | null> {
-    if (choice === 'none') return null;
+  async function keyFor(choice: string): Promise<string | null> {
     if (choice === 'upload') return upload?.key ?? null;
-    const it = SOUND_BY_ID[choice];
-    if (!it) return null;
-    if (it.kind === 'score') setBusy('Loading the piano…');
-    else if (!(await hasCached(it.track!))) setBusy('Preparing sound… (first time only)');
-    try {
-      const loaded = await engine.loadSound(choice);
-      setTimeline(loaded.visual);
-      if (loaded.visual?.parts?.length) setNowPlaying({ title: loaded.visual.parts[0].title, composer: loaded.visual.parts[0].composer });
-      else setNowPlaying(null);
-      return loaded.key;
-    } finally {
-      setBusy(null);
-    }
+    const r = await loadForPlay(choice, setBusy);
+    setTimeline(r.visual);
+    const first = r.visual?.parts?.[0];
+    setNowPlaying(first ? { title: first.title, composer: first.composer } : null);
+    return r.key;
   }
 
   async function start() {
@@ -199,9 +180,9 @@ export function Player(p: PlayerProps) {
       await engine.startSession({
         music: key,
         noise: null,
-        params: buildParams({ breathing, pattern, music: sound !== 'none', rhythm }),
+        params: recipeParams(recipe, { volume: s.volume }),
         timing: timingFor(minutes, p.sleep),
-        title: nowPlaying?.title ?? p.title,
+        title: nowPlaying?.title ?? mood.name,
         onEnded: () => void finish(false, true),
       });
       setRunning(true);
@@ -222,26 +203,21 @@ export function Player(p: PlayerProps) {
     setRunning(false);
     wake.current?.release().catch(() => {});
     wake.current = null;
-    await recordSession(p.goalId, startedAt.current, Math.min(secs, total));
+    await recordSession(mood.flow, startedAt.current, Math.min(secs, total));
     p.onFinish?.(secs, early);
   }
 
-  async function pickSound(choice: SoundChoice) {
+  async function pickSound(choice: string) {
     if (choice === 'upload' && !upload) {
       fileInput.current?.click();
       return;
     }
-    setSound(choice);
+    setRecipe({ ...recipe, sound: choice });
     setTimeline(null);
-    setNowPlaying(null);
-    // Keep the beat tone in the key of the new music.
-    const tonic = SOUND_BY_ID[choice]?.tonic;
-    if (tonic !== undefined) setRhythm((r) => ({ ...r, carrier: carrierFor(tonic) }));
-    updateSettings({ lastSound: { ...settings.value.lastSound, [p.goalId]: choice } });
+    setNowPlaying(choice === 'upload' && upload ? { title: upload.name, composer: 'Your music' } : null);
     if (running) {
       try {
-        const key = await keyFor(choice);
-        engine.setMusic(key);
+        engine.setMusic(await keyFor(choice));
       } catch (e) {
         setError(`Could not load that sound: ${String((e as Error).message ?? e)}`);
       }
@@ -255,7 +231,7 @@ export function Player(p: PlayerProps) {
     try {
       const info = await engine.loadUpload(f);
       setUpload(info);
-      setSound('upload');
+      setRecipeState({ ...recipe, sound: 'upload' });
       setTimeline(null);
       setNowPlaying({ title: info.name, composer: 'Your music' });
       if (running) engine.setMusic(info.key);
@@ -268,35 +244,37 @@ export function Player(p: PlayerProps) {
 
   const remaining = Math.max(0, total - elapsed);
   const guideText = p.guide?.(elapsed, total) ?? null;
-  const suggestions = [...new Set([sound, ...p.sounds])].filter((id) => SOUND_BY_ID[id]).slice(0, 5);
+  const custom = isCustom(p.moodId);
 
   return (
     <div>
       <div class="stage">
         {showInstrument ? (
-          <InstrumentView kind={instrument!} timeline={timeline} playing={playing} breathing={breathing} pattern={pattern} onPart={(title, composer) => setNowPlaying({ title, composer })} />
+          <InstrumentView kind={instrument!} timeline={timeline} playing={playing} breathing={recipe.breathing} pattern={pattern} onPart={(title, composer) => setNowPlaying({ title, composer })} />
         ) : (
-          <Orb pattern={pattern} active={breathing} playing={playing} />
+          <Orb pattern={pattern} active={recipe.breathing} playing={playing} label={playing ? 'Just listen' : 'Ready'} />
         )}
         {instrument && (
           <div class="visual-toggle">
-            <Seg value={s.visual} label="Visual" onChange={(visual) => updateSettings({ visual })} options={[{ v: 'instrument', label: instrument === 'piano' ? 'Piano' : 'Strings' }, { v: 'circle', label: 'Circle' }]} />
+            <Seg value={s.visual} label="Visual" onChange={(visual) => updateSettings({ visual })} options={[{ v: 'instrument', label: instrument === 'piano' ? 'Piano' : 'Strings' }, { v: 'circle', label: 'Lamp' }]} />
           </div>
         )}
         <div class="now-playing">
-          {(nowPlaying || item) && sound !== 'none' && (
+          {sound !== 'none' && (
             <>
-              <div class="t">{nowPlaying?.title ?? item?.title}</div>
+              <div class="t">{nowPlaying?.title ?? item?.title ?? 'Your music'}</div>
               <div class="c">{nowPlaying?.composer ?? item?.subtitle}</div>
             </>
           )}
         </div>
-        <div class="timer" aria-live="off">{fmtTime(running ? remaining : total)}</div>
-        <div class="timer-sub">{running ? (p.sleep && elapsed > 300 ? 'fading out slowly' : 'remaining') : `${minutes} min session`}</div>
       </div>
       {guideText && <div class="guide">{guideText}</div>}
 
-      <div class="play-row">
+      <div class="control-row">
+        <div>
+          <div class="timer" aria-live="off">{fmtTime(running ? remaining : total)}</div>
+          <div class="timer-sub">{running ? (p.sleep && elapsed > 300 ? 'fading out' : 'left') : 'minutes'}</div>
+        </div>
         {!running ? (
           <button class="play-btn" onClick={start} disabled={!!busy} aria-label="Start">
             <Icon name="play" />
@@ -306,6 +284,7 @@ export function Player(p: PlayerProps) {
             <Icon name="stop" />
           </button>
         )}
+        <button class="btn small ghost side-btn" onClick={() => setTune('music')}><Icon name="sliders" /> Tune</button>
       </div>
       {busy && <p class="center muted small">{busy}</p>}
       {error && <div class="note danger-note">{error}</div>}
@@ -313,62 +292,60 @@ export function Player(p: PlayerProps) {
       {p.children?.(elapsed, running)}
 
       <div class="card tight">
-        <div class="field-head" style="margin-bottom:8px">
-          <span>Music</span>
-          <button class="btn small ghost" style="min-height:32px;padding:4px 12px" onClick={() => setLibrary(true)}><Icon name="book" size={16} /> Browse all</button>
+        <div class="field-head" style="margin:0">
+          <span class="eyebrow">Your {mood.name.toLowerCase()} mix</span>
+          <span class="tiny faint">{custom ? 'tuned by you' : 'starting point'}</span>
         </div>
-        <div class="chips">
-          {suggestions.map((id) => (
-            <button class={`chip ${sound === id ? 'on' : ''}`} onClick={() => pickSound(id)}>{shortTitle(id)}</button>
-          ))}
-          <button class={`chip ${sound === 'upload' ? 'on' : ''}`} onClick={() => (upload ? pickSound('upload') : fileInput.current?.click())}>
-            {upload ? `♪ ${shorten(upload.name)}` : '+ Your music'}
-          </button>
-          {p.allowNone && <button class={`chip ${sound === 'none' ? 'on' : ''}`} onClick={() => pickSound('none')}>No sound</button>}
+        <div class="recipe">
+          <button onClick={() => setTune('music')}><div class="k"><Icon name="note" />Music</div><div class="val">{shortTitle(sound, upload)}</div></button>
+          <button onClick={() => setTune('breathing')}><div class="k"><Icon name="lungs" />Breathing</div><div class="val">{breathSummary(recipe)}</div></button>
+          <button onClick={() => setTune('beat')}><div class="k"><Icon name="wave" />Beat</div><div class="val">{recipe.beat.on ? `${feelName(recipe.beat.rate)} · ${recipe.beat.type === 'binaural' ? 'headphones' : 'speakers'}` : 'Off'}</div></button>
+          <button onClick={() => setTune('length')}><div class="k"><Icon name="clock" />Length</div><div class="val">{minutes} min{p.sleep ? ', fades out' : ''}</div></button>
         </div>
-        <input ref={fileInput} type="file" accept="audio/*" hidden onChange={onFile} />
-        {!running && (
-          <div style="margin-top:10px">
-            <Seg value={minutes} onChange={setMinutes} label="Length" options={p.minuteOptions.map((m) => ({ v: m, label: `${m} min` }))} />
-          </div>
-        )}
-        <div class="hr" style="margin:12px 0 4px" />
-        <Toggle label="Breathing guide" hint="Breath cue + a gentle swell in the sound" checked={breathing} onChange={setBreathing} />
-        {!NO_RHYTHM[p.goalId] && (
-          <Toggle
-            label={<>Beats <span class="exp-tag">Experimental</span></>}
-            hint={rhythm.mode === 'off' ? 'Off' : `${rhythm.mode === 'binaural' ? 'Binaural (headphones)' : 'Pulse'} · ${rhythm.rate} Hz · tuned to the music`}
-            checked={rhythm.mode !== 'off'}
-            onChange={(on) => setRhythm({ ...rhythm, mode: on ? s.beatMode : 'off', carrier: carrierFor(SOUND_BY_ID[sound]?.tonic ?? 9) })}
-          />
-        )}
         <div class="btn-row" style="margin-bottom:0">
-          <button class="btn small ghost" onClick={() => setAdjust(true)}><Icon name="sliders" size={18} /> Adjust</button>
-          <button class="btn small ghost" onClick={() => setExportOpen(true)}><Icon name="download" size={18} /> Save as file</button>
+          <button class="btn small" onClick={() => go(`/tune/${p.moodId}`)}><Icon name="spark" /> Find my sound</button>
+          <button class="btn small ghost" onClick={() => setTune('music')}><Icon name="sliders" /> Fine-tune</button>
         </div>
       </div>
 
       <VolumeCard />
 
+      <div class="fact">
+        <Icon name="book" />
+        <span>{mood.fact} <a href={`#/evidence/${mood.evidence}`}>The research</a></span>
+      </div>
+
+      <input ref={fileInput} type="file" accept="audio/*" hidden onChange={onFile} />
+
       {engine.isIOS() && (
-        <p class="tiny faint">On iPhone and iPad, sound can stop when the screen locks. For long or overnight sessions, use "Save as file" and play it in a music app.</p>
+        <p class="tiny faint">On iPhone and iPad, sound can stop when the screen locks. For long or overnight sessions, use "Save as file" in Tune and play it in a music app.</p>
       )}
 
-      {rhythm.mode !== 'off' && (
-        <p class="tiny faint">
-          Beats: evidence is weak, and most of any benefit likely comes from the music{p.goalId === 'focus' ? '; unproven for focus' : ''}. Test it blinded in the Lab to see if it helps you.
-        </p>
+      {tune && (
+        <TuneSheet
+          moodId={p.moodId}
+          focus={tune}
+          recipe={recipe}
+          setRecipe={setRecipe}
+          running={running}
+          allowNone={p.allowNone}
+          uploadName={upload?.name}
+          onBrowse={() => { setTune(null); setLibrary(true); }}
+          onUpload={() => fileInput.current?.click()}
+          onPickSound={(id) => void pickSound(id)}
+          onExport={() => { setTune(null); setExportOpen(true); }}
+          onReset={() => { resetRecipe(p.moodId); setRecipeState(recipeFor(p.moodId)); }}
+          onClose={() => setTune(null)}
+        />
       )}
-
       {library && <MusicLibrary current={sound} allowNone={p.allowNone} onPick={(id) => { setLibrary(false); if (id === 'upload') fileInput.current?.click(); else void pickSound(id); }} onClose={() => setLibrary(false)} />}
-      {adjust && <AdjustSheet onClose={() => setAdjust(false)} goalId={p.goalId} rhythm={rhythm} setRhythm={setRhythm} />}
       {exportOpen && (
         <ExportSheet
           onClose={() => setExportOpen(false)}
           maxMinutes={minutes}
           make={async (mins) => ({
             music: await keyFor(sound),
-            params: buildParams({ breathing, pattern, music: sound !== 'none', rhythm }),
+            params: recipeParams(recipe, { volume: 1 }),
             timing: timingFor(mins, p.sleep),
           })}
         />
@@ -377,35 +354,157 @@ export function Player(p: PlayerProps) {
   );
 }
 
+export function breathSummary(r: Recipe): string {
+  if (!r.breathing) return 'Off';
+  if (r.breath.mode === 'sigh') return 'Double inhale, long out';
+  return `${r.breath.bpm} per min${r.breath.ratio >= 1.3 ? ', long out' : ''}`;
+}
+
 async function hasCached(id: TrackId): Promise<boolean> {
   try {
-    const keys = await db.get('cache', `track:${id}:${engine.sampleRate()}:v4`);
-    return !!keys;
+    return !!(await db.get('cache', `track:${id}:${engine.sampleRate()}:v4`));
   } catch {
     return false;
   }
 }
 
-function shorten(s: string): string {
-  return s.length > 18 ? `${s.slice(0, 16)}…` : s;
-}
-
-function shortTitle(id: string): string {
+export function shortTitle(id: string, upload?: engine.UploadInfo | null): string {
+  if (id === 'upload') return upload?.name ?? 'Your music';
+  if (id === 'none') return 'Silence';
   const it = SOUND_BY_ID[id];
   if (!it) return id;
   if (it.category !== 'classical') return it.title;
   const last = it.subtitle.split(' ').pop();
-  const t = it.title.replace(/ in [A-G][♭♯]? (major|minor)/, '').replace(/,? Op\. [0-9]+ No\. ([0-9]+)/, ' $1').replace(/\s*\(.*\)/, '');
+  const t = it.title.replace(/ in [A-G][♭♯]? (major|minor)/, '').replace(/,? Op\. [0-9]+ No\. ([0-9]+)/, ' $1').replace(/\s*\(.*\)/, '').replace(/, BWV 846/, '');
   return `${last}: ${t}`;
 }
 
-const CAT_ICON: Record<Category, string> = { classical: 'book', piano: 'leaf', chill: 'wave', ambient: 'moon', strings: 'wave', musicbox: 'heart', nature: 'drop' };
+export function VolumeCard() {
+  const s = settings.value;
+  return (
+    <div class="card tight">
+      <Slider label="Volume" value={Math.round(s.volume * 100)} min={5} max={100} step={1} format={(v) => `${v}%`} onInput={(v) => updateSettings({ volume: v / 100 })} />
+      <p class="tiny faint" style="margin:0">Soft is best: you should still hear someone talk to you.</p>
+    </div>
+  );
+}
+
+const PATTERN_OPTS: { v: 'even' | 'long' | 'sigh'; label: string }[] = [
+  { v: 'even', label: 'Even' },
+  { v: 'long', label: 'Long out' },
+  { v: 'sigh', label: 'Sigh' },
+];
+
+function patternKey(r: Recipe): 'even' | 'long' | 'sigh' {
+  if (r.breath.mode === 'sigh') return 'sigh';
+  return r.breath.ratio >= 1.3 ? 'long' : 'even';
+}
+
+function TuneSheet(o: {
+  moodId: MoodId; focus: Section; recipe: Recipe; setRecipe: (r: Recipe) => void; running: boolean; allowNone?: boolean; uploadName?: string;
+  onBrowse: () => void; onUpload: () => void; onPickSound: (id: string) => void; onExport: () => void; onReset: () => void; onClose: () => void;
+}) {
+  const r = o.recipe;
+  const set = (patch: Partial<Recipe>) => o.setRecipe({ ...r, ...patch });
+  const mood = MOOD_BY_ID[o.moodId];
+  const mono = settings.value.headphones.mono === 'mono';
+  useEffect(() => {
+    document.getElementById(`tune-${o.focus}`)?.scrollIntoView({ block: 'start' });
+  }, []);
+  const suggestions = [...new Set([r.sound, ...mood.tasteMusic])].filter((id) => SOUND_BY_ID[id]).slice(0, 5);
+  return (
+    <Sheet onClose={o.onClose}>
+      <h2>Tune your {mood.name.toLowerCase()} mix</h2>
+      <p class="explain">Changes apply right away{o.running ? ', while it plays' : ''}, and the app remembers them for next time.</p>
+
+      <div class="sheet-section" id="tune-music">
+        <h3><Icon name="note" />Music</h3>
+        <div class="chips">
+          {suggestions.map((id) => <button class={`chip ${r.sound === id ? 'on' : ''}`} onClick={() => o.onPickSound(id)}>{shortTitle(id)}</button>)}
+          {o.allowNone && <button class={`chip ${r.sound === 'none' ? 'on' : ''}`} onClick={() => o.onPickSound('none')}>Silence</button>}
+        </div>
+        <div class="btn-row" style="margin-top:4px">
+          <button class="btn small" onClick={o.onBrowse}><Icon name="book" /> All music</button>
+          <button class="btn small ghost" onClick={o.onUpload}><Icon name="upload" /> {o.uploadName ? 'Another file' : 'Your own file'}</button>
+        </div>
+      </div>
+
+      <div class="sheet-section" id="tune-breathing">
+        <h3><Icon name="lungs" />Breathing</h3>
+        <Toggle label="Breathing guide" hint="A visual cue, and the music gently rises and falls with it" checked={r.breathing} onChange={(breathing) => set({ breathing })} />
+        {r.breathing && (
+          <>
+            <div class="field">
+              <div class="field-head"><span>Rhythm</span></div>
+              <Seg value={patternKey(r)} label="Breathing rhythm" options={PATTERN_OPTS} onChange={(k) => set({ breath: k === 'sigh' ? { ...r.breath, mode: 'sigh' } : { ...r.breath, mode: 'paced', ratio: k === 'long' ? 1.6 : 1 } })} />
+              <p class="explain" style="margin-top:6px">{patternKey(r) === 'sigh' ? 'Breathe in, take a small extra sip of air, then let it all out slowly.' : patternKey(r) === 'long' ? 'The breath out is longer than the breath in. Most people find this the most calming.' : 'In and out take the same time.'}</p>
+            </div>
+            {r.breath.mode === 'paced' && (
+              <div class="field">
+                <Slider label="Pace" value={r.breath.bpm} min={BPM_MIN} max={BPM_MAX} step={0.5} format={(v) => `${v} breaths a minute`} onInput={(bpm) => set({ breath: { ...r.breath, bpm } })} />
+                <div class="field-ends"><span>slower</span><span>faster</span></div>
+              </div>
+            )}
+            <div class="field">
+              <div class="field-head"><span>Music follows your breath</span></div>
+              <Seg value={r.swellDb === 0 ? 0 : r.swellDb <= 3 ? 3 : 6} label="Swell" onChange={(swellDb) => set({ swellDb })} options={[{ v: 0, label: 'Not at all' }, { v: 3, label: 'Gently' }, { v: 6, label: 'Clearly' }]} />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div class="sheet-section" id="tune-beat">
+        <h3><Icon name="wave" />Beat</h3>
+        <p class="explain">A soft, steady rhythm layered under the music. Pick a feel and see what suits you.</p>
+        <Toggle label="Beat" checked={r.beat.on} onChange={(on) => set({ beat: { ...r.beat, on } })} />
+        {r.beat.on && (
+          <>
+            <div class="field">
+              <div class="field-head"><span>Feel</span><span class="v">{BEAT_FEELS.find((f) => f.rate === r.beat.rate)?.hint ?? `${r.beat.rate} Hz`}</span></div>
+              <Seg value={r.beat.rate} label="Beat feel" onChange={(rate) => set({ beat: { ...r.beat, rate } })} options={BEAT_FEELS.map((f) => ({ v: f.rate, label: f.name }))} />
+            </div>
+            <div class="field">
+              <div class="field-head"><span>Strength</span></div>
+              <Seg value={r.beat.strength} label="Beat strength" onChange={(strength) => set({ beat: { ...r.beat, strength } })} options={(['subtle', 'medium', 'strong'] as const).map((k) => ({ v: k, label: STRENGTH[k].label }))} />
+            </div>
+            <div class="field">
+              <div class="field-head"><span>Listening on</span></div>
+              <Seg value={r.beat.type} label="Beat type" onChange={(type) => set({ beat: { ...r.beat, type } })} options={[{ v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speakers' }]} />
+              <p class="explain" style="margin-top:6px">
+                {r.beat.type === 'binaural'
+                  ? `Headphones: each ear gets a slightly different tone and your brain hears the beat between them. Needs both earbuds in.${mono ? ' Your stereo check said mono, so choose Speakers.' : ''}`
+                  : 'Speakers: the music itself gently pulses. Works anywhere, even on one earbud.'}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div class="sheet-section" id="tune-length">
+        <h3><Icon name="clock" />Length</h3>
+        <div class="chips">{[...new Set([...mood.minuteOptions, r.minutes])].sort((a, b) => a - b).map((m) => <button class={`chip ${r.minutes === m ? 'on' : ''}`} onClick={() => set({ minutes: m })}>{m} min</button>)}</div>
+        {o.running && <p class="explain">A new length applies next time you press play.</p>}
+      </div>
+
+      <div class="sheet-section">
+        <div class="btn-row">
+          <button class="btn small" onClick={() => go(`/tune/${o.moodId}`)}><Icon name="spark" /> Find my sound</button>
+          <button class="btn small ghost" onClick={o.onExport}><Icon name="download" /> Save as file</button>
+        </div>
+        <button class="link-btn" onClick={o.onReset}>Reset {mood.name.toLowerCase()} to the starting point</button>
+      </div>
+      <button class="btn block cream" style="margin-top:12px" onClick={o.onClose}>Done</button>
+    </Sheet>
+  );
+}
+
+const CAT_ICON: Record<Category, string> = { classical: 'note', piano: 'note', chill: 'wave', ambient: 'moon', strings: 'wave', musicbox: 'spark', nature: 'drop' };
 
 export function MusicLibrary({ current, allowNone, onPick, onClose }: { current: string; allowNone?: boolean; onPick: (id: string) => void; onClose: () => void }) {
   return (
     <Sheet onClose={onClose}>
-      <h2 style="margin-top:4px">Music</h2>
-      <p class="small muted" style="margin-top:0">Everything here is free to use. Beats (if on) are added on top automatically and tuned to the music's key.</p>
+      <h2>Music</h2>
+      <p class="explain">Pick anything. Breathing and the beat follow along, and the beat is tuned to the music's key.</p>
       <button class="lib-item" onClick={() => onPick('upload')}>
         <span class="ic"><Icon name="upload" /></span>
         <span><div class="tt">Your own music</div><div class="st">Any audio file on this device. It never leaves your phone.</div></span>
@@ -413,151 +512,59 @@ export function MusicLibrary({ current, allowNone, onPick, onClose }: { current:
       {allowNone && (
         <button class={`lib-item ${current === 'none' ? 'on' : ''}`} onClick={() => onPick('none')}>
           <span class="ic"><Icon name="x" /></span>
-          <span><div class="tt">No sound</div><div class="st">Breathing only</div></span>
+          <span><div class="tt">Silence</div><div class="st">Breathing only</div></span>
         </button>
       )}
-      {CATEGORIES.map((c) => {
-        const items = SOUNDS.filter((x) => x.category === c.id);
-        return (
-          <div>
-            <div class="lib-cat"><h3>{c.name}</h3><span class="tiny faint">{c.blurb}</span></div>
-            {items.map((it) => (
-              <button class={`lib-item ${current === it.id ? 'on' : ''}`} onClick={() => onPick(it.id)}>
-                <span class="ic"><Icon name={CAT_ICON[c.id]} /></span>
-                <span><div class="tt">{it.title}</div><div class="st">{it.subtitle}</div></span>
-                {it.category === 'classical' && <span class="lic">{it.license}</span>}
-              </button>
-            ))}
-          </div>
-        );
-      })}
-      <p class="tiny faint">Classical pieces are played from free scores (Mutopia Project) on a real upright piano sound (FreePats, CC0), with gentle human timing and pedal added. It is a computer playing, not a recorded pianist. Licenses: see ATTRIBUTION.md.</p>
-      <button class="btn block" onClick={onClose}>Close</button>
-    </Sheet>
-  );
-}
-
-export function VolumeCard() {
-  const s = settings.value;
-  return (
-    <div class="card tight">
-      <Slider
-        label="Volume"
-        value={Math.round(s.volume * 100)}
-        min={5}
-        max={100}
-        step={1}
-        format={(v) => `${v}%`}
-        onInput={(v) => updateSettings({ volume: v / 100 })}
-      />
-      <p class="tiny faint" style="margin:0">Keep it low: you should still be able to hear someone talk to you. Your device volume matters more than this slider.</p>
-    </div>
-  );
-}
-
-function AdjustSheet({ onClose, goalId, rhythm, setRhythm }: { onClose: () => void; goalId: string; rhythm: RhythmSettings; setRhythm: (r: RhythmSettings) => void }) {
-  const s = settings.value;
-  const b = s.breath;
-  const mono = s.headphones.mono === 'mono';
-  return (
-    <Sheet onClose={onClose}>
-      <h2 style="margin-top:4px">Breathing</h2>
-      <Seg
-        value={b.mode}
-        label="Pattern"
-        onChange={(mode) => updateSettings({ breath: { ...b, mode } })}
-        options={[
-          { v: 'paced', label: 'Slow breathing' },
-          { v: 'sigh', label: 'Cyclic sigh' },
-        ]}
-      />
-      {b.mode === 'paced' ? (
-        <>
-          <Slider label="Pace" value={b.bpm} min={BPM_MIN} max={BPM_MAX} step={0.5} format={(v) => `${v} breaths/min`} onInput={(bpm) => updateSettings({ breath: { ...b, bpm } })} />
-          <Slider label="Exhale length" value={b.ratio} min={1} max={2} step={0.1} format={(v) => (v === 1 ? 'same as inhale' : `${v.toFixed(1)}× inhale`)} onInput={(ratio) => updateSettings({ breath: { ...b, ratio } })} />
-          <p class="tiny faint">About 6 breaths a minute is the pace studied most. A longer exhale tends to feel calmer.</p>
-        </>
-      ) : (
-        <p class="small muted">Breathe in fully through your nose, then take a short second sip of air on top, then let it all out slowly through your mouth. About 6–7 breaths a minute.</p>
-      )}
-      <Slider label="Swell depth" value={s.swellDb} min={0} max={8} step={0.5} format={(v) => (v === 0 ? 'off' : `${v} dB`)} onInput={(swellDb) => updateSettings({ swellDb })} />
-      <Toggle label="Vibrate on each breath" hint="Android only. iPhones don't allow it." checked={s.vibrate} onChange={(vibrate) => updateSettings({ vibrate })} />
-
-      <h2>Rhythm layer <span class="exp-tag">Experimental</span></h2>
-      {NO_RHYTHM[goalId] ? (
-        <p class="small muted">{NO_RHYTHM[goalId]}</p>
-      ) : (
-        <>
-          <p class="small muted" style="margin-top:0">
-            {goalId === 'focus' ? 'Experimental, unproven for focus. ' : ''}Beats probably don't "tune" your brain; evidence is weak. Off by default. To find out if it does anything for you, test it blinded in the Lab.
-          </p>
-          <Seg
-            value={rhythm.mode}
-            label="Rhythm mode"
-            onChange={(mode) => setRhythm({ ...rhythm, mode })}
-            options={[{ v: 'off', label: 'Off' }, { v: 'pulse', label: 'Pulse (speakers OK)' }, { v: 'binaural', label: 'Binaural' }]}
-          />
-          {rhythm.mode === 'binaural' && (
-            <p class="tiny" style="color:var(--moderate)">Headphones only, in stereo.{mono ? ' Your stereo check said mono, so you will not get a beat.' : ''}</p>
-          )}
-          {rhythm.mode !== 'off' && (
-            <>
-              <Slider label={rhythm.mode === 'binaural' ? 'Beat rate (Δf)' : 'Pulse rate'} value={rhythm.rate} min={rhythm.mode === 'binaural' ? 1 : 0.5} max={20} step={0.5} format={(v) => `${v} Hz`} onInput={(rate) => setRhythm({ ...rhythm, rate })} />
-              {rhythm.mode === 'pulse' && (
-                <Slider label="Pulse depth" value={Math.round(rhythm.depth * 100)} min={0} max={40} step={1} format={(v) => `${v}%`} onInput={(v) => setRhythm({ ...rhythm, depth: v / 100 })} />
-              )}
-              {rhythm.mode === 'binaural' && (
-                <>
-                  <Slider label="Carrier tone" value={rhythm.carrier} min={150} max={450} step={5} format={(v) => `${v} Hz`} onInput={(carrier) => setRhythm({ ...rhythm, carrier })} />
-                  <Slider label="Tone level vs music" value={rhythm.levelDb} min={-30} max={-12} step={1} format={(v) => `${v} dB`} onInput={(levelDb) => setRhythm({ ...rhythm, levelDb })} />
-                </>
-              )}
-              <p class="tiny faint">Rates used in studies: relax 4–7 Hz (or ~10), sleep 0.25–4 Hz, focus 14–20 Hz. 40 Hz binaural is not offered: it's at the edge of what people can perceive.</p>
-            </>
-          )}
-        </>
-      )}
-      <button class="btn block" onClick={onClose}>Done</button>
+      {CATEGORIES.map((c) => (
+        <div>
+          <div class="lib-cat"><h3>{c.name}</h3><div class="tiny faint">{c.blurb}</div></div>
+          {SOUNDS.filter((x) => x.category === c.id).map((it) => (
+            <button class={`lib-item ${current === it.id ? 'on' : ''}`} onClick={() => onPick(it.id)}>
+              <span class="ic"><Icon name={CAT_ICON[c.id]} /></span>
+              <span><div class="tt">{it.title}</div><div class="st">{it.subtitle}</div></span>
+            </button>
+          ))}
+        </div>
+      ))}
+      <p class="tiny faint">Classical pieces are played from free scores (Mutopia Project) on a real upright piano (FreePats), with human timing and pedal added. Licenses: ATTRIBUTION.md.</p>
+      <button class="btn block cream" onClick={onClose}>Close</button>
     </Sheet>
   );
 }
 
 function ExportSheet({ onClose, maxMinutes, make }: { onClose: () => void; maxMinutes: number; make: (mins: number) => Promise<{ music: string | null; params: MixParams; timing: SessionTiming }> }) {
   const [mins, setMins] = useState(Math.min(maxMinutes, 10));
-  const [bits, setBits] = useState<16 | 24>(24);
+  const [bits, setBits] = useState<16 | 24>(16);
   const [progress, setProgress] = useState<number | null>(null);
-  const [result, setResult] = useState<{ url: string; name: string; size: number } | null>(null);
+  const [result, setResult] = useState<{ url: string; name: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const rate = engine.sampleRate();
   const size = (mins * 60 * rate * 2 * bits) / 8;
   const opts = [5, 10, 15, 20, 25, 30, 45, 60].filter((m) => m <= Math.max(maxMinutes, 5));
-
-  async function go() {
+  async function run() {
     setErr(null);
     setProgress(0);
     try {
       await engine.ensureAudio();
       const cfg = await make(mins);
-      const blob = await engine.exportWav({ ...cfg, noise: null, params: { ...cfg.params, volume: 1 }, bits, onProgress: setProgress });
-      const name = engine.neutralName();
-      setResult({ url: URL.createObjectURL(blob), name, size: blob.size });
+      const blob = await engine.exportWav({ ...cfg, noise: null, bits, onProgress: setProgress });
+      setResult({ url: URL.createObjectURL(blob), name: engine.neutralName() });
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {
       setProgress(null);
     }
   }
-
   return (
     <Sheet onClose={onClose}>
-      <h2 style="margin-top:4px">Save as a sound file</h2>
-      <p class="small muted">Renders this session (same sound, breathing swell, fades and limiter) to a WAV file on your device. Nothing is uploaded.</p>
+      <h2>Save as a sound file</h2>
+      <p class="explain">Makes a WAV file of this mix (music, breathing swell, beat and fades) on your device, for playing anywhere. Nothing is uploaded.</p>
       <div class="field">
         <div class="field-head"><span>Length</span></div>
         <div class="chips">{opts.map((m) => <button class={`chip ${m === mins ? 'on' : ''}`} onClick={() => setMins(m)}>{m} min</button>)}</div>
       </div>
-      <Seg value={bits} onChange={setBits} label="Quality" options={[{ v: 24, label: '24-bit (best)' }, { v: 16, label: '16-bit (smaller)' }]} />
-      <p class="tiny faint">About {(size / 1e6).toFixed(0)} MB at {rate / 1000} kHz. WAV files are big; 16-bit is plenty for listening.</p>
+      <Seg value={bits} onChange={setBits} label="Quality" options={[{ v: 16, label: 'Standard' }, { v: 24, label: 'Studio (bigger)' }]} />
+      <p class="tiny faint">About {(size / 1e6).toFixed(0)} MB.</p>
       {progress !== null && (
         <div class="field">
           <div class="meter"><i style={{ width: `${Math.round(progress * 100)}%` }} /></div>
@@ -566,11 +573,9 @@ function ExportSheet({ onClose, maxMinutes, make }: { onClose: () => void; maxMi
       )}
       {err && <div class="note danger-note">{err}</div>}
       {result ? (
-        <a class="btn primary block" href={result.url} download={result.name}>
-          <Icon name="download" size={18} /> Download {result.name}
-        </a>
+        <a class="btn primary block" href={result.url} download={result.name}><Icon name="download" /> Download {result.name}</a>
       ) : (
-        <button class="btn primary block" disabled={progress !== null} onClick={go}>Render file</button>
+        <button class="btn primary block" disabled={progress !== null} onClick={run}>Make the file</button>
       )}
       <button class="btn block ghost" style="margin-top:8px" onClick={onClose}>Close</button>
     </Sheet>
