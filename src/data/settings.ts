@@ -86,3 +86,10 @@ export function resetRecipe(mood: MoodId): void {
 export function isCustom(mood: MoodId): boolean {
   return !!settings.value.recipes[mood];
 }
+
+/** Headphone beat only when the user confirmed stereo headphones. */
+export function resolveBeatType(t: 'auto' | 'binaural' | 'pulse'): 'binaural' | 'pulse' {
+  if (t !== 'auto') return t;
+  const h = settings.value.headphones;
+  return h.lr === 'ok' && h.mono === 'stereo' ? 'binaural' : 'pulse';
+}

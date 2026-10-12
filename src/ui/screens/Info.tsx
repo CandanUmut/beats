@@ -13,31 +13,46 @@ import { go } from '../router';
 import { UrgeChart } from './Flows';
 import { downloadText, toCsv } from '../../lib/csv';
 
+const EXTRAS = new Set(['beats-entrainment', 'beats-anger', 'beats-urge', 'beats-relax', 'beats-procedures', 'beats-sleep', 'beats-focus']);
+
 export function EvidenceList() {
+  const [showExtras, setShowExtras] = useState(false);
+  const row = (e: (typeof EVIDENCE)[number]) => (
+    <button class="row-link" onClick={() => go(`/evidence/${e.id}`)}>
+      <span>
+        <div style="font-weight:650">{e.title}</div>
+        <div class="muted small">{e.summary}</div>
+      </span>
+      <span style="flex:none"><GradeChip grade={e.grade} /></span>
+    </button>
+  );
   return (
-    <div class="accent-relax">
-      <TopBar title="Research" />
-      <h1>The research <em>behind it</em></h1>
+    <div class="accent-honey">
+      <TopBar title="Why it works" />
+      <h1>The research <em>behind Steady</em></h1>
       <p class="lead">Every part of Steady comes from published studies on breathing, music, sound and habits. Here is what each one found, the strong results and the null ones, so you can decide for yourself.</p>
+      <h2>What Steady is built on</h2>
+      <div class="card">{EVIDENCE.filter((e) => !EXTRAS.has(e.id)).map(row)}</div>
       <div class="card">
-        {EVIDENCE.map((e) => (
-          <button class="row-link" onClick={() => go(`/evidence/${e.id}`)}>
-            <span>
-              <div style="font-weight:600">{e.title}</div>
-              <div class="muted small">{e.summary}</div>
-            </span>
-            <span style="flex:none"><GradeChip grade={e.grade} /></span>
-          </button>
-        ))}
+        <button class="row-link" style="border:0;padding:4px 0" onClick={() => setShowExtras(!showExtras)}>
+          <span><div class="serif" style="font-size:19px">The beat layer</div><div class="muted small">An experimental extra. What studies on binaural beats and pulses found.</div></span>
+          <Icon name={showExtras ? 'chevdown' : 'chev'} />
+        </button>
+        {showExtras && EVIDENCE.filter((e) => EXTRAS.has(e.id)).map(row)}
       </div>
       <button class="btn block" onClick={() => go('/myths')}>Myths, briefly</button>
+      <div class="card">
+        <h3 style="margin-top:0">Test it on yourself</h3>
+        <p class="small muted">Studies describe averages. The Lab runs a fair, blinded experiment on you: does the beat, the breathing guide or a type of music actually help you?</p>
+        <button class="btn small" onClick={() => go('/lab')}><Icon name="flask" /> Open the Lab</button>
+      </div>
       <div class="card">
         <h3 style="margin-top:0">Grading key</h3>
         {(Object.keys(GRADE_KEY) as Grade[]).map((g) => (
           <p class="small"><GradeChip grade={g} /> <span class="muted">{GRADE_KEY[g]}</span></p>
         ))}
       </div>
-      <p class="tiny faint">Source: the project's research summary (docs/RESEARCH.md, October 2026). Some numbers come from abstracts; check the primary paper before relying on any single figure.</p>
+      <p class="tiny faint">Source: the project's research summary (docs/RESEARCH.md, October 2026).</p>
     </div>
   );
 }
@@ -129,6 +144,7 @@ export function Settings() {
       <TopBar title="Settings" />
       <h1>Settings</h1>
       <VolumeCard />
+      <p class="tiny faint" style="margin:-4px 4px 10px">Soft is best: you should still hear someone talk to you. Your phone also has a loudness limiter: on iPhone, Settings → Sounds & Haptics → Headphone Safety → Reduce Loud Audio; on Android, look for a media volume limiter.</p>
       <div class="card">
         <h3 style="margin-top:0">Weekly listening</h3>
         <div class="field-head"><span>Last 7 days</span><span class="v">{hours.toFixed(1)} h of {budget.toFixed(0)} h</span></div>
@@ -186,8 +202,9 @@ export function Settings() {
           </div>
         )}
       </div>
+      <button class="row-link" onClick={() => go('/lab')}><span>Experiment Lab</span><Icon name="chev" /></button>
       <button class="row-link" onClick={() => go('/about')}><span>About & disclaimer</span><Icon name="chev" /></button>
-      <button class="row-link" onClick={() => go('/evidence')}><span>Evidence</span><Icon name="chev" /></button>
+      <button class="row-link" onClick={() => go('/evidence')}><span>Why it works</span><Icon name="chev" /></button>
     </div>
   );
 }

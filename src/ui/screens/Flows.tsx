@@ -1,9 +1,9 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { NOT_TREATMENT } from '../../data/safety';
 import { MOOD_BY_ID, type MoodId } from '../../data/moods';
+import { recipeFor } from '../../data/settings';
 import { newCheckIn, saveCheckIn, type CheckIn } from '../../data/checkins';
-import { HelpButton, Icon, MoodGlyph, Rating, Seg, Steps, TopBar, fmtTime, helpOpen } from '../components';
+import { Icon, MoodGlyph, Rating, Seg, TopBar, fmtTime, helpOpen } from '../components';
 import { Player } from '../Player';
 import { go } from '../router';
 
@@ -15,6 +15,15 @@ function Head({ mood, kicker }: { mood: MoodId; kicker?: string }) {
       <h1>{m.name}</h1>
     </div>
   );
+}
+
+/** One line about what the session just did, from its recipe. */
+function afterLine(mood: MoodId, secs: number): string | null {
+  const r = recipeFor(mood);
+  if (!r.breathing || secs < 45) return null;
+  const perMin = r.breath.mode === 'sigh' ? 6.7 : r.breath.bpm;
+  const n = Math.round((secs / 60) * perMin);
+  return `That was about ${n} slow breaths. Long, slow breaths out turn on your body's brake.`;
 }
 
 function Done({ mood, title, children, again }: { mood: MoodId; title: string; children?: ComponentChildren; again?: () => void }) {
@@ -34,18 +43,18 @@ function Done({ mood, title, children, again }: { mood: MoodId; title: string; c
 // --- Relaxed ------------------------------------------------------------------
 
 export function Relax() {
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<number | null>(null);
   const [key, setKey] = useState(0);
   return (
     <div class="accent-honey">
       <TopBar />
       <Head mood="relaxed" />
-      {done ? (
-        <Done mood="relaxed" title="That was yours." again={() => { setDone(false); setKey(key + 1); }}>
-          <p class="muted">Notice how your shoulders, jaw and breath feel now.</p>
+      {done !== null ? (
+        <Done mood="relaxed" title="That was yours." again={() => { setDone(null); setKey(key + 1); }}>
+          <p class="muted">{afterLine('relaxed', done) ?? ''} Notice how your shoulders, jaw and breath feel now.</p>
         </Done>
       ) : (
-        <Player key={key} moodId="relaxed" guide={(t) => (t < 40 ? 'Breathe with the cue, or just listen.' : null)} onFinish={(_, early) => !early && setDone(true)} />
+        <Player key={key} moodId="relaxed" onFinish={(secs, early) => (!early || secs > 120) && setDone(secs)} />
       )}
     </div>
   );
@@ -67,36 +76,30 @@ export function Calm() {
   const ci = useRef<CheckIn>(newCheckIn('calm', 10));
   const [before, setBefore] = useState<number | null>(null);
   const [after, setAfter] = useState<number | null>(null);
+  const [secs, setSecs] = useState(0);
   return (
     <div class="accent-sage">
       <TopBar />
-      <Steps n={3} at={step} />
       {step === 0 && (
         <>
-          <Head mood="calm" kicker="First, step away" />
-          <p class="lead">If you can, move away from whatever set this off: another room, outside, or just turn away from the screen. Nothing needs a reply right now.</p>
-          <div class="card">
+          <Head mood="calm" />
+          <details class="card tight intro-card" open>
+            <summary>First, step away <Icon name="chevdown" size={16} /></summary>
+            <p class="small muted" style="margin:6px 0 10px">If you can, move away from whatever set this off. Nothing needs a reply right now. Then press play.</p>
             <div class="field-head"><span>How heated do you feel? <span class="faint">(optional)</span></span></div>
-            <Rating label="Before" value={before} onChange={setBefore} low="calm" high="boiling" />
-          </div>
-          <button class="btn primary block" onClick={() => { ci.current.before = before; setStep(1); }}>I've stepped away</button>
-          <p class="tiny faint center">Slowing your breath works better than venting. <a href="#/evidence/venting">Why</a></p>
+            <Rating label="Before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="calm" high="boiling" />
+          </details>
+          <Player
+            moodId="calm"
+            guide={(t) => (t < 180 ? CALM_LINES[Math.floor(t / 30) % CALM_LINES.length] : t < 220 ? 'Now let the music carry you.' : null)}
+            onFinish={(s) => { ci.current.minutes = Math.round(s / 60); setSecs(s); setStep(1); }}
+          />
         </>
       )}
       {step === 1 && (
         <>
-          <Head mood="calm" />
-          <Player
-            moodId="calm"
-            autoStart
-            guide={(t) => (t < 180 ? CALM_LINES[Math.floor(t / 30) % CALM_LINES.length] : t < 220 ? 'Now let the music carry you.' : null)}
-            onFinish={(secs) => { ci.current.minutes = Math.round(secs / 60); setStep(2); }}
-          />
-        </>
-      )}
-      {step === 2 && (
-        <>
           <Head mood="calm" kicker="Checking in" />
+          {afterLine('calm', secs) && <p class="lead">{afterLine('calm', secs)}</p>}
           <div class="card">
             <div class="field-head"><span>How heated do you feel now?</span></div>
             <Rating label="After" value={after} onChange={setAfter} low="calm" high="boiling" />
@@ -145,48 +148,40 @@ export function Urge() {
   return (
     <div class="accent-clay">
       <TopBar />
-      <Steps n={3} at={step} />
-      {step === 0 && (
-        <>
-          <Head mood="grounded" kicker="Ride it out" />
-          <p class="lead">Urges usually peak and fade within minutes if you don't act on them. For the next stretch, your only job is to wait and watch it.</p>
-          <div class="card">
-            <div class="field-head"><span>How strong is the urge?</span></div>
-            <Rating label="Urge before" value={before} onChange={setBefore} low="none" high="overwhelming" />
-            <div class="field-head" style="margin-top:14px"><span>While I wait, I'll…</span></div>
-            <textarea value={plan} placeholder="My plan" onInput={(e) => setPlan((e.target as HTMLTextAreaElement).value)} />
-            <div class="chips" style="margin-top:8px">
-              {PLAN_IDEAS.map((p) => <button class="chip" onClick={() => setPlan(plan ? `${plan}, ${p.toLowerCase()}` : p)}>{p}</button>)}
-            </div>
-          </div>
-          <button class="btn primary block" onClick={() => { ci.current.before = before; ci.current.plan = plan; setStep(1); }}>Start</button>
-          <p class="tiny faint center">{NOT_TREATMENT} <button class="link-btn" onClick={() => (helpOpen.value = true)}>Talk to someone</button></p>
-        </>
-      )}
-      {step === 1 && (
+      {step < 2 && (
         <>
           <Head mood="grounded" />
-          {plan && <div class="note"><b>My plan:</b> {plan}</div>}
-          <Player moodId="grounded" autoStart onFinish={() => { ci.current.during = during; setStep(2); }}>
+          <details class="card tight intro-card" open={step === 0}>
+            <summary>{plan ? `My plan: ${plan}` : 'Before you start'} <Icon name="chevdown" size={16} /></summary>
+            <p class="small muted" style="margin:6px 0 10px">Urges usually peak and fade within minutes if you don't act on them. Your only job is to wait and watch it.</p>
+            <div class="field-head"><span>How strong is the urge? <span class="faint">(optional)</span></span></div>
+            <Rating label="Urge before" value={before} onChange={(v) => { setBefore(v); ci.current.before = v; }} low="none" high="overwhelming" />
+            <div class="field-head" style="margin-top:14px"><span>While I wait, I'll… <span class="faint">(optional)</span></span></div>
+            <textarea value={plan} placeholder="My plan" onInput={(e) => { setPlan((e.target as HTMLTextAreaElement).value); ci.current.plan = (e.target as HTMLTextAreaElement).value; }} />
+            <div class="chips" style="margin-top:8px">
+              {PLAN_IDEAS.map((p) => <button class="chip" onClick={() => { const v = plan ? `${plan}, ${p.toLowerCase()}` : p; setPlan(v); ci.current.plan = v; }}>{p}</button>)}
+            </div>
+          </details>
+          <Player moodId="grounded" onFinish={() => { ci.current.during = during; setStep(2); }}>
             {(t, playing) => {
+              if (!playing) return null;
+              if (step === 0) setTimeout(() => setStep(1), 0);
               const current = [...URGE_PROMPTS].reverse().find((p) => t >= p.at) ?? URGE_PROMPTS[0];
               const rated = during.some((d) => d.t >= current.at && d.t < current.at + 120);
               return (
-                <>
-                  <div class="prompt-card" key={current.at}>
-                    <p style="margin:0">{current.text}</p>
-                    {current.rate && playing && !rated && (
-                      <div style="margin-top:10px">
-                        <Rating label="Urge now" value={null} onChange={(v) => setDuring([...during, { t: Math.round(t), v }])} low="none" high="overwhelming" />
-                      </div>
-                    )}
-                    {current.rate && rated && <p class="tiny muted" style="margin:8px 0 0">Noted. Keep riding it.</p>}
-                  </div>
-                  <div class="center" style="margin:6px 0 10px"><HelpButton /></div>
-                </>
+                <div class="prompt-card" key={current.at}>
+                  <p style="margin:0">{current.text}</p>
+                  {current.rate && !rated && (
+                    <div style="margin-top:10px">
+                      <Rating label="Urge now" value={null} onChange={(v) => setDuring([...during, { t: Math.round(t), v }])} low="none" high="overwhelming" />
+                    </div>
+                  )}
+                  {current.rate && rated && <p class="tiny muted" style="margin:8px 0 0">Noted. Keep riding it.</p>}
+                </div>
               );
             }}
           </Player>
+          <p class="tiny faint center">Want to talk to someone? <button class="link-btn" onClick={() => (helpOpen.value = true)}>Support lines</button></p>
         </>
       )}
       {step === 2 && (
@@ -204,7 +199,7 @@ export function Urge() {
           </div>
           <div class="btn-row">
             <button class="btn" onClick={() => go('/move')}><Icon name="walk" /> Move</button>
-            <button class="btn" onClick={() => setStep(1)}>Another round</button>
+            <button class="btn" onClick={() => setStep(0)}>Another round</button>
           </div>
           <button class="btn block" onClick={() => (helpOpen.value = true)}><Icon name="heart" /> Talk to someone</button>
           <button class="btn primary block" style="margin-top:10px" onClick={async () => { ci.current.after = after; await saveCheckIn(ci.current); go('/'); }}>Done</button>
@@ -244,21 +239,29 @@ export const SLEEP_HABITS = [
 ];
 
 export function Sleep() {
-  const [step, setStep] = useState(0);
+  const [done, setDone] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [showHabits, setShowHabits] = useState(false);
+  const morning = new Date().getHours() >= 5 && new Date().getHours() < 12;
   return (
     <div class="accent-dusk">
       <TopBar />
-      {step === 0 && (
+      <Head mood="sleepy" />
+      {done ? (
+        <Done mood="sleepy" title="Good night." />
+      ) : (
         <>
-          <Head mood="sleepy" kicker="Wind down" />
-          <p class="lead">Start this once you're in bed. The music plays softly, then fades to silence on its own.</p>
-          <button class="btn primary block" onClick={() => setStep(1)}>I'm in bed</button>
-          <div class="card">
-            <button class="row-link" style="border:0;padding:0" onClick={() => setShowHabits(!showHabits)}>
+          {morning && (
+            <button class="resume" style="margin-bottom:12px" onClick={() => go('/sleep/diary')}>
+              <span class="dot"><Icon name="moon" /></span>
+              <span><div class="eyebrow">Good morning</div><div style="font-weight:650">How did you sleep? Two taps.</div></span>
+            </button>
+          )}
+          <Player moodId="sleepy" sleep guide={(t) => (t < 60 ? 'Get comfortable. Close your eyes when you like.' : null)} onFinish={(_, early) => !early && setDone(true)} />
+          <div class="card tight">
+            <button class="row-link" style="border:0;padding:4px 0" onClick={() => setShowHabits(!showHabits)}>
               <span><b>Tonight's habits</b> <span class="muted small">· {checked.size} of {SLEEP_HABITS.length}</span></span>
-              <Icon name="chev" />
+              <Icon name={showHabits ? 'chevdown' : 'chev'} />
             </button>
             {showHabits && SLEEP_HABITS.map((h, i) => (
               <label class="check">
@@ -267,17 +270,9 @@ export function Sleep() {
               </label>
             ))}
           </div>
-          <button class="btn ghost block" onClick={() => go('/sleep/diary')}>Morning check-in</button>
-          <p class="tiny faint center">Designed to make you drowsy: only in bed, never while driving.</p>
+          <p class="tiny faint center">Start it once you're in bed. It fades to silence on its own.</p>
         </>
       )}
-      {step === 1 && (
-        <>
-          <Head mood="sleepy" />
-          <Player moodId="sleepy" sleep autoStart guide={(t) => (t < 60 ? 'Get comfortable. Close your eyes when you like.' : null)} onFinish={(_, early) => (early ? setStep(0) : setStep(2))} />
-        </>
-      )}
-      {step === 2 && <Done mood="sleepy" title="Good night." />}
     </div>
   );
 }
@@ -285,38 +280,30 @@ export function Sleep() {
 // --- Focused ------------------------------------------------------------------
 
 export function Focus() {
-  const [step, setStep] = useState(0);
+  const [after, setAfter] = useState(false);
   const [task, setTask] = useState('');
   const [blocks, setBlocks] = useState(0);
   const [key, setKey] = useState(0);
   return (
     <div class="accent-moss">
       <TopBar />
-      {step === 0 && (
-        <>
-          <Head mood="focused" kicker="One block, one thing" />
-          <p class="lead">Pick a single task. Phone face down, notifications off.</p>
-          <div class="card">
-            <div class="field-head"><span>This block I'll work on</span></div>
-            <input type="text" value={task} placeholder="e.g. draft the intro" onInput={(e) => setTask((e.target as HTMLInputElement).value)} />
-          </div>
-          <button class="btn primary block" onClick={() => setStep(1)}>Start the block</button>
-        </>
-      )}
-      {step === 1 && (
-        <>
-          <Head mood="focused" kicker={task ? `Working on: ${task}` : undefined} />
-          <Player key={key} moodId="focused" autoStart onFinish={(_, early) => { if (!early) setBlocks(blocks + 1); setStep(2); }} />
-        </>
-      )}
-      {step === 2 && (
+      <Head mood="focused" kicker={task ? `Working on: ${task}` : undefined} />
+      {after ? (
         <Done mood="focused" title={blocks ? `Block done${blocks > 1 ? ` · ${blocks} today` : ''}` : 'Block stopped'}>
           <p class="muted">Take five. Stand up, look at something far away, move a little.</p>
           <div class="btn-row">
             <button class="btn" onClick={() => go('/move')}><Icon name="walk" /> Move</button>
-            <button class="btn" onClick={() => { setKey(key + 1); setStep(1); }}>Next block</button>
+            <button class="btn" onClick={() => { setKey(key + 1); setAfter(false); }}>Next block</button>
           </div>
         </Done>
+      ) : (
+        <>
+          <div class="card tight intro-card">
+            <div class="field-head"><span>This block I'll work on <span class="faint">(optional)</span></span></div>
+            <input type="text" value={task} placeholder="e.g. draft the intro" onInput={(e) => setTask((e.target as HTMLInputElement).value)} />
+          </div>
+          <Player key={key} moodId="focused" onFinish={(_, early) => { if (!early) setBlocks(blocks + 1); setAfter(true); }} />
+        </>
       )}
     </div>
   );
@@ -342,7 +329,7 @@ export function Breathe() {
       <Head mood="brighter" />
       {done ? (
         <Done mood="brighter" title="Nicely done." again={() => { setDone(false); setKey(key + 1); }}>
-          <p class="muted">A few minutes a day of this is enough to notice a difference.</p>
+          <p class="muted">{afterLine('brighter', recipeFor('brighter').minutes * 60) ?? ''} A few minutes a day is enough to notice a difference.</p>
         </Done>
       ) : (
         <Player

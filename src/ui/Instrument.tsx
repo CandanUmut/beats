@@ -31,12 +31,13 @@ function firstVisible(notes: VisualNote[], t: number): number {
   return lo;
 }
 
-export function InstrumentView({ kind, timeline, playing, breathing, pattern, onPart }: {
+export function InstrumentView({ kind, timeline, playing, breathing, pattern, onPart, showPill = true }: {
   kind: 'piano' | 'strings';
   timeline: Timeline | null;
   playing: boolean;
   breathing: boolean;
   pattern: BreathPattern;
+  showPill?: boolean;
   onPart?: (title: string, composer: string) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -117,12 +118,12 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
       const bt = playing ? engine.sessionTime() : (now - t0) / 1000;
       const bs = breathAt(pattern, bt);
       if (breathing) drawTide(ctx2, W, H, kind === 'piano' ? H - Math.min(78, H * 0.3) : H, bs.level, accent);
-      if (kind === 'piano') drawPiano(ctx2, W, H, { lo, hi, whites, glow, visible, mt, look, accent, reduce: !!reduce });
+      if (kind === 'piano') drawPiano(ctx2, W, H, { lo, hi, whites, glow, visible, mt, look, accent, reduce: !!reduce, dim: breathing ? 0.55 : 1 });
       else drawStrings(ctx2, W, H, { glow, accent, time: (now - t0) / 1000, reduce: !!reduce });
 
       // Breathing pill and now-playing label.
       if (pill.current && dot.current) {
-        pill.current.style.opacity = breathing ? '1' : '0';
+        pill.current.style.opacity = breathing && showPill ? '1' : '0';
         if (label.current) label.current.textContent = PHASE[bs.phase];
         if (num.current) num.current.textContent = String(Math.max(1, Math.ceil(bs.remaining)));
         dot.current.style.transform = `scale(${0.4 + 0.6 * bs.level})`;
@@ -136,7 +137,7 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [timeline, playing, kind, breathing, pattern]);
+  }, [timeline, playing, kind, breathing, pattern, showPill]);
 
   return (
     <div class="instrument">
@@ -156,23 +157,28 @@ export function InstrumentView({ kind, timeline, playing, breathing, pattern, on
  * watching the notes.
  */
 function drawTide(c: CanvasRenderingContext2D, W: number, _H: number, floor: number, level: number, accent: string) {
-  const top = floor - (0.12 + 0.78 * level) * floor;
-  const g = c.createLinearGradient(0, top, 0, floor);
-  g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(0.02, accent);
-  g.addColorStop(1, accent);
-  c.globalAlpha = 0.1 + 0.06 * level;
-  c.fillStyle = g;
-  c.fillRect(0, top, W, floor - top);
-  // The edge of the tide: a gentle curved line.
-  c.globalAlpha = 0.55;
-  c.strokeStyle = accent;
-  c.lineWidth = 2;
+  // Band height follows the breath: about 18% of the stage when empty, 82% when full.
+  const top = floor - (0.18 + 0.64 * level) * floor;
+  const wave = (x: number) => top + 5 * Math.sin((x / W) * Math.PI * 2 + level * 2.5);
   c.beginPath();
-  for (let x = 0; x <= W; x += 6) {
-    const y = top + 4 * Math.sin((x / W) * Math.PI * 2 + level * 2);
-    if (x === 0) c.moveTo(x, y); else c.lineTo(x, y);
-  }
+  c.moveTo(0, floor);
+  for (let x = 0; x <= W; x += 6) c.lineTo(x, wave(x));
+  c.lineTo(W, wave(W));
+  c.lineTo(W, floor);
+  c.closePath();
+  const g = c.createLinearGradient(0, top, 0, floor);
+  g.addColorStop(0, accent);
+  g.addColorStop(1, accent);
+  c.globalAlpha = 0.16 + 0.08 * level;
+  c.fillStyle = g;
+  c.fill();
+  // The bright edge of the tide.
+  c.globalAlpha = 0.9;
+  c.strokeStyle = accent;
+  c.lineWidth = 2.5;
+  c.beginPath();
+  for (let x = 0; x <= W; x += 6) { const y = wave(x); if (x === 0) c.moveTo(x, y); else c.lineTo(x, y); }
+  c.lineTo(W, wave(W));
   c.stroke();
   c.globalAlpha = 1;
 }
@@ -190,7 +196,7 @@ function roundRect(c: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 function drawPiano(
   c: CanvasRenderingContext2D, W: number, H: number,
-  o: { lo: number; hi: number; whites: number[]; glow: Map<number, number>; visible: { n: VisualNote; t: number }[]; mt: number; look: number; accent: string; reduce: boolean },
+  o: { lo: number; hi: number; whites: number[]; glow: Map<number, number>; visible: { n: VisualNote; t: number }[]; mt: number; look: number; accent: string; reduce: boolean; dim: number },
 ) {
   const keyH = Math.min(78, H * 0.3);
   const top = H - keyH;
@@ -215,7 +221,7 @@ function drawPiano(
       const [x, w] = xOf(n.midi);
       const y = yEnd - h;
       if (y > top) continue;
-      c.globalAlpha = 0.28 + 0.5 * n.vel;
+      c.globalAlpha = (0.28 + 0.5 * n.vel) * o.dim;
       const grad = c.createLinearGradient(0, y, 0, yEnd);
       grad.addColorStop(0, 'rgba(255,255,255,0.0)');
       grad.addColorStop(0.35, o.accent);
@@ -309,17 +315,6 @@ function drawStrings(c: CanvasRenderingContext2D, W: number, H: number, o: { glo
       if (x === 0) c.moveTo(x, yy); else c.lineTo(x, yy);
     }
     c.stroke();
-    // A soft bow that drifts slowly across while the part plays.
-    if (a > 0.05 && !o.reduce) {
-      const bx = W * (0.55 + 0.18 * Math.sin(o.time * 0.6 + i));
-      c.globalAlpha = 0.5 * a;
-      c.strokeStyle = '#efe6d8';
-      c.lineWidth = 2;
-      c.beginPath();
-      c.moveTo(bx - 70, y - 14);
-      c.lineTo(bx + 70, y + 14);
-      c.stroke();
-    }
     c.globalAlpha = 0.55;
     c.fillStyle = '#b9ad9c';
     c.fillText(STRING_NAMES[i], 8, y - gap * 0.32);

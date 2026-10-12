@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'preact/hooks';
-import { ASK_FIRST, DISCLAIMER, NEVER_WHILE } from '../../data/safety';
+import { ASK_FIRST, DISCLAIMER } from '../../data/safety';
 import { settings, updateSettings } from '../../data/settings';
 import * as engine from '../../audio/engine';
 import { Icon, Steps } from '../components';
 import { VolumeCard } from '../Player';
 
 type Step = 'safety' | 'lr' | 'mono' | 'level' | 'done';
-const ORDER: Step[] = ['safety', 'lr', 'mono', 'level'];
-
 export function Onboarding({ onDone, recheck }: { onDone: () => void; recheck?: boolean }) {
-  const [step, setStep] = useState<Step>(recheck ? 'lr' : 'safety');
+  // First run is short: safety, then a comfortable volume. The headphone checks
+  // run later, when a headphone beat would actually help.
+  const ORDER: Step[] = recheck ? ['lr', 'mono'] : ['safety', 'level'];
+  const [step, setStep] = useState<Step>(ORDER[0]);
   const at = ORDER.indexOf(step);
   const next = () => {
     const n = ORDER[at + 1];
@@ -37,25 +38,24 @@ function Safety({ onNext }: { onNext: () => void }) {
   const [ok, setOk] = useState(false);
   return (
     <>
-      <h1>Before you start</h1>
-      <p class="lead">Steady is an experimental sound and breathing tool. It's free, it runs only on this device, and it never sends your data anywhere.</p>
+      <div class="eyebrow" style="margin-top:12px">Welcome to Steady</div>
+      <h1>Sound and breath, <em>tuned to how you want to feel.</em></h1>
       <div class="card">
-        <h3 style="margin-top:0">Please don't use it</h3>
-        <ul class="small" style="padding-left:20px;margin:0">
-          <li>{NEVER_WHILE}</li>
-          <li>Instead of getting real help when you need it.</li>
+        <ul class="small" style="padding-left:20px;margin:0;display:grid;gap:8px">
+          <li>Steady is a free sound and breathing tool, not medical care.</li>
+          <li>Keep the volume low enough to hear someone talk to you.</li>
+          <li>Don't use it while driving or when you need to stay alert.</li>
+          <li>If you're struggling, tap <b>Support</b> any time for someone to talk to.</li>
         </ul>
-        <h3>Ask first</h3>
-        <p class="small" style="margin:0">{ASK_FIRST}</p>
-        <h3>Keep it quiet</h3>
-        <p class="small" style="margin:0">Loud headphones are the main real risk. Keep the volume low: you should still hear someone talk to you.</p>
-        <h3>No flashing</h3>
-        <p class="small" style="margin:0">Nothing in this app flashes or flickers.</p>
       </div>
-      <p class="tiny muted">{DISCLAIMER}</p>
+      <details class="more"><summary>Full disclaimer and who should check with a doctor first</summary>
+        <p class="tiny muted">{ASK_FIRST}</p>
+        <p class="tiny muted">{DISCLAIMER}</p>
+      </details>
+      <p class="tiny faint">Everything stays on this device. No account, no tracking.</p>
       <label class="check">
         <input type="checkbox" checked={ok} onChange={(e) => setOk((e.target as HTMLInputElement).checked)} />
-        <span>I understand. This is not a medical device.</span>
+        <span>Got it</span>
       </label>
       <button class="btn primary block" disabled={!ok} onClick={onNext}>Continue</button>
     </>
@@ -203,11 +203,8 @@ function Level({ onNext }: { onNext: () => void }) {
         <p class="small muted" style="margin:0">Soft noise, like distant rain</p>
       </div>
       <VolumeCard />
-      <div class="note">
-        Turn on your phone's limiter too. On iPhone: Settings → Sounds & Haptics → Headphone Safety → Reduce Loud Audio. On Android, look for "Media volume limiter" or a hearing-protection setting.
-      </div>
-      <p class="tiny faint">The app can't know how loud this really is in your ears. That depends on your headphones and device volume.</p>
-      <button class="btn primary block" onClick={onNext}>Done</button>
+      <p class="tiny faint">Tip: your phone has a built-in loudness limiter (iPhone: Headphone Safety → Reduce Loud Audio). See Settings.</p>
+      <button class="btn primary block" onClick={onNext}>Start</button>
     </>
   );
 }

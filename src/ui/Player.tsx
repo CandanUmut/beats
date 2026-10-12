@@ -4,13 +4,13 @@ import * as engine from '../audio/engine';
 import type { TrackId } from '../audio/dsp/synth';
 import { breathAt, patternFor, BPM_MIN, BPM_MAX, type BreathPattern, type BreathPhase } from '../audio/dsp/breath';
 import { DEFAULT_PARAMS, type MixParams, type SessionTiming } from '../audio/dsp/mixer';
-import { settings, updateSettings, recipeFor, saveRecipe, resetRecipe, isCustom } from '../data/settings';
+import { settings, updateSettings, recipeFor, saveRecipe, resetRecipe, isCustom, resolveBeatType } from '../data/settings';
 import { recordSession } from '../data/usage';
 import { db } from '../data/db';
 import { BEAT_FEELS, MOOD_BY_ID, STRENGTH, feelName, type MoodId, type Recipe } from '../data/moods';
 import { CATEGORIES, SOUNDS, SOUND_BY_ID, carrierFor, type Category } from '../music/catalog';
 import { InstrumentView, type Timeline } from './Instrument';
-import { Icon, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
+import { Icon, MoodGlyph, Seg, Sheet, Slider, Toggle, fmtTime } from './components';
 import { go } from './router';
 
 export interface PlayerProps {
@@ -26,7 +26,7 @@ export interface PlayerProps {
   autoStart?: boolean;
 }
 
-export const PHASE_TEXT: Record<BreathPhase, string> = { in: 'Breathe in', topup: 'Sip more', hold: 'Hold', out: 'Breathe out' };
+export const PHASE_TEXT: Record<BreathPhase, string> = { in: 'Breathe in', topup: 'Sip in', hold: 'Hold', out: 'Breathe out' };
 
 /** The lamp: a breathing light that grows as you breathe in, with a countdown. */
 export function Orb({ pattern, active, playing, label }: { pattern: BreathPattern; active: boolean; playing: boolean; label?: string }) {
@@ -64,6 +64,31 @@ export function Orb({ pattern, active, playing, label }: { pattern: BreathPatter
   );
 }
 
+/** Large, plain breathing cue shown under the instrument animation. */
+export function BreathCue({ pattern, playing }: { pattern: BreathPattern; playing: boolean }) {
+  const ph = useRef<HTMLSpanElement>(null);
+  const ct = useRef<HTMLSpanElement>(null);
+  const t0 = useRef(performance.now());
+  useEffect(() => {
+    let raf = 0;
+    const frame = () => {
+      const t = playing ? engine.sessionTime() : (performance.now() - t0.current) / 1000;
+      const st = breathAt(pattern, t);
+      if (ph.current) ph.current.textContent = PHASE_TEXT[st.phase];
+      if (ct.current) ct.current.textContent = String(Math.max(1, Math.ceil(st.remaining)));
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [pattern, playing]);
+  return (
+    <div class="breath-cue" aria-live="off">
+      <span class="ph" ref={ph} />
+      <span class="ct" ref={ct} />
+    </div>
+  );
+}
+
 /** Turn a recipe into mixer parameters. */
 export function recipeParams(r: Recipe, opts: { volume: number; music?: boolean }): MixParams {
   const tonic = SOUND_BY_ID[r.sound]?.tonic ?? 9;
@@ -74,7 +99,7 @@ export function recipeParams(r: Recipe, opts: { volume: number; music?: boolean 
     noiseGainDb: -80,
     breath: { enabled: r.breathing, pattern: patternFor(r.breath), depthDb: r.breathing ? r.swellDb : 0 },
     rhythm: r.beat.on
-      ? { mode: r.beat.type, rate: r.beat.rate, depth: st.depth, carrier: carrierFor(tonic), levelDb: st.levelDb }
+      ? { mode: resolveBeatType(r.beat.type), rate: r.beat.rate, depth: st.depth, carrier: carrierFor(tonic), levelDb: st.levelDb }
       : { ...DEFAULT_PARAMS.rhythm, mode: 'off' },
     volume: opts.volume,
   };
@@ -113,6 +138,7 @@ export function Player(p: PlayerProps) {
   const [tune, setTune] = useState<Section | null>(null);
   const [library, setLibrary] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [showVol, setShowVol] = useState(false);
   const [running, setRunning] = useState(false);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [nowPlaying, setNowPlaying] = useState<{ title: string; composer: string } | null>(null);
@@ -246,19 +272,20 @@ export function Player(p: PlayerProps) {
   const guideText = p.guide?.(elapsed, total) ?? null;
   const custom = isCustom(p.moodId);
 
+  const beatType = resolveBeatType(recipe.beat.type);
+  const h = s.headphones;
+  const askHeadphones = recipe.beat.on && recipe.beat.type === 'auto' && h.lr === null && !h.at;
+
   return (
     <div>
       <div class="stage">
+        {!showInstrument && <div class="stage-glyph"><MoodGlyph id={p.moodId} /></div>}
         {showInstrument ? (
-          <InstrumentView kind={instrument!} timeline={timeline} playing={playing} breathing={recipe.breathing} pattern={pattern} onPart={(title, composer) => setNowPlaying({ title, composer })} />
+          <InstrumentView kind={instrument!} timeline={timeline} playing={playing} breathing={recipe.breathing} pattern={pattern} showPill={false} onPart={(title, composer) => setNowPlaying({ title, composer })} />
         ) : (
           <Orb pattern={pattern} active={recipe.breathing} playing={playing} label={playing ? 'Just listen' : 'Ready'} />
         )}
-        {instrument && (
-          <div class="visual-toggle">
-            <Seg value={s.visual} label="Visual" onChange={(visual) => updateSettings({ visual })} options={[{ v: 'instrument', label: instrument === 'piano' ? 'Piano' : 'Strings' }, { v: 'circle', label: 'Lamp' }]} />
-          </div>
-        )}
+        {showInstrument && recipe.breathing && playing && <BreathCue pattern={pattern} playing={playing} />}
         <div class="now-playing">
           {sound !== 'none' && (
             <>
@@ -267,14 +294,17 @@ export function Player(p: PlayerProps) {
             </>
           )}
         </div>
+        {!playing && <p class="fact-line">{mood.fact} <a href={`#/evidence/${mood.evidence}`}>Why</a></p>}
+        {playing && guideText && <div class="guide">{guideText}</div>}
+        {instrument && (
+          <div class="visual-toggle">
+            <Seg value={s.visual} label="Visual" onChange={(visual) => updateSettings({ visual })} options={[{ v: 'instrument', label: instrument === 'piano' ? 'Piano' : 'Strings' }, { v: 'circle', label: 'Lamp' }]} />
+          </div>
+        )}
       </div>
-      {guideText && <div class="guide">{guideText}</div>}
 
       <div class="control-row">
-        <div>
-          <div class="timer" aria-live="off">{fmtTime(running ? remaining : total)}</div>
-          <div class="timer-sub">{running ? (p.sleep && elapsed > 300 ? 'fading out' : 'left') : 'minutes'}</div>
-        </div>
+        <button class="vol-btn" aria-label="Volume" onClick={() => setShowVol(!showVol)}><Icon name="volume" /></button>
         {!running ? (
           <button class="play-btn" onClick={start} disabled={!!busy} aria-label="Start">
             <Icon name="play" />
@@ -284,35 +314,45 @@ export function Player(p: PlayerProps) {
             <Icon name="stop" />
           </button>
         )}
-        <button class="btn small ghost side-btn" onClick={() => setTune('music')}><Icon name="sliders" /> Tune</button>
+        <button class="len-chip" onClick={() => setTune('length')} aria-label="Session length">
+          {running ? `${fmtTime(remaining)} left` : `${minutes} min`} <Icon name="chevdown" />
+        </button>
       </div>
+      {showVol && (
+        <div class="card tight" style="margin-top:4px">
+          <Slider label="Volume" value={Math.round(s.volume * 100)} min={5} max={100} step={1} format={(v) => `${v}%`} onInput={(v) => updateSettings({ volume: v / 100 })} />
+        </div>
+      )}
       {busy && <p class="center muted small">{busy}</p>}
       {error && <div class="note danger-note">{error}</div>}
+
+      {askHeadphones && (
+        <div class="note" style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+          <span>Wearing headphones? The beat can go deeper with them.</span>
+          <span style="display:flex;gap:4px;flex:none">
+            <button class="link-btn" onClick={() => go('/recheck')}>Check</button>
+            <button class="link-btn" style="color:var(--muted)" onClick={() => updateSettings({ headphones: { ...h, at: Date.now() } })}>No</button>
+          </span>
+        </div>
+      )}
 
       {p.children?.(elapsed, running)}
 
       <div class="card tight">
         <div class="field-head" style="margin:0">
           <span class="eyebrow">Your {mood.name.toLowerCase()} mix</span>
-          <span class="tiny faint">{custom ? 'tuned by you' : 'starting point'}</span>
+          <span class="tiny" style={{ color: custom ? 'var(--accent)' : 'var(--faint)', fontWeight: 700 }}>{custom ? 'Yours' : 'Suggested'}</span>
         </div>
         <div class="recipe">
           <button onClick={() => setTune('music')}><div class="k"><Icon name="note" />Music</div><div class="val">{shortTitle(sound, upload)}</div></button>
           <button onClick={() => setTune('breathing')}><div class="k"><Icon name="lungs" />Breathing</div><div class="val">{breathSummary(recipe)}</div></button>
-          <button onClick={() => setTune('beat')}><div class="k"><Icon name="wave" />Beat</div><div class="val">{recipe.beat.on ? `${feelName(recipe.beat.rate)} · ${recipe.beat.type === 'binaural' ? 'headphones' : 'speakers'}` : 'Off'}</div></button>
+          <button onClick={() => setTune('beat')}><div class="k"><Icon name="wave" />Beat</div><div class="val">{recipe.beat.on ? `${feelName(recipe.beat.rate)} ${beatType === 'binaural' ? 'beat (headphones)' : 'pulse (speaker)'}` : 'Off'}</div></button>
           <button onClick={() => setTune('length')}><div class="k"><Icon name="clock" />Length</div><div class="val">{minutes} min{p.sleep ? ', fades out' : ''}</div></button>
         </div>
-        <div class="btn-row" style="margin-bottom:0">
-          <button class="btn small" onClick={() => go(`/tune/${p.moodId}`)}><Icon name="spark" /> Find my sound</button>
-          <button class="btn small ghost" onClick={() => setTune('music')}><Icon name="sliders" /> Fine-tune</button>
-        </div>
-      </div>
-
-      <VolumeCard />
-
-      <div class="fact">
-        <Icon name="book" />
-        <span>{mood.fact} <a href={`#/evidence/${mood.evidence}`}>The research</a></span>
+        <button class="find-btn" onClick={() => go(`/tune/${p.moodId}`)}>
+          <Icon name="spark" />
+          <span><div class="tt">Find my sound</div><div class="st">A two-minute listening test</div></span>
+        </button>
       </div>
 
       <input ref={fileInput} type="file" accept="audio/*" hidden onChange={onFile} />
@@ -356,7 +396,7 @@ export function Player(p: PlayerProps) {
 
 export function breathSummary(r: Recipe): string {
   if (!r.breathing) return 'Off';
-  if (r.breath.mode === 'sigh') return 'Double inhale, long out';
+  if (r.breath.mode === 'sigh') return 'Sigh: in, sip, long out';
   return `${r.breath.bpm} per min${r.breath.ratio >= 1.3 ? ', long out' : ''}`;
 }
 
@@ -384,7 +424,6 @@ export function VolumeCard() {
   return (
     <div class="card tight">
       <Slider label="Volume" value={Math.round(s.volume * 100)} min={5} max={100} step={1} format={(v) => `${v}%`} onInput={(v) => updateSettings({ volume: v / 100 })} />
-      <p class="tiny faint" style="margin:0">Soft is best: you should still hear someone talk to you.</p>
     </div>
   );
 }
@@ -409,13 +448,18 @@ function TuneSheet(o: {
   const mood = MOOD_BY_ID[o.moodId];
   const mono = settings.value.headphones.mono === 'mono';
   useEffect(() => {
-    document.getElementById(`tune-${o.focus}`)?.scrollIntoView({ block: 'start' });
+    if (o.focus !== 'music') document.getElementById(`tune-${o.focus}`)?.scrollIntoView({ block: 'start' });
   }, []);
   const suggestions = [...new Set([r.sound, ...mood.tasteMusic])].filter((id) => SOUND_BY_ID[id]).slice(0, 5);
   return (
     <Sheet onClose={o.onClose}>
-      <h2>Tune your {mood.name.toLowerCase()} mix</h2>
-      <p class="explain">Changes apply right away{o.running ? ', while it plays' : ''}, and the app remembers them for next time.</p>
+      <div class="sheet-head">
+        <div class="sheet-head-row">
+          <h2>Your {mood.name.toLowerCase()} mix</h2>
+          <button class="btn small cream" onClick={o.onClose}>Done</button>
+        </div>
+        <p class="explain" style="margin:4px 0 0">Changes apply right away and are remembered.</p>
+      </div>
 
       <div class="sheet-section" id="tune-music">
         <h3><Icon name="note" />Music</h3>
@@ -437,7 +481,7 @@ function TuneSheet(o: {
             <div class="field">
               <div class="field-head"><span>Rhythm</span></div>
               <Seg value={patternKey(r)} label="Breathing rhythm" options={PATTERN_OPTS} onChange={(k) => set({ breath: k === 'sigh' ? { ...r.breath, mode: 'sigh' } : { ...r.breath, mode: 'paced', ratio: k === 'long' ? 1.6 : 1 } })} />
-              <p class="explain" style="margin-top:6px">{patternKey(r) === 'sigh' ? 'Breathe in, take a small extra sip of air, then let it all out slowly.' : patternKey(r) === 'long' ? 'The breath out is longer than the breath in. Most people find this the most calming.' : 'In and out take the same time.'}</p>
+              <p class="explain" style="margin-top:6px">{patternKey(r) === 'sigh' ? 'Sigh: breathe in, take a small extra sip of air, then let it all out slowly.' : patternKey(r) === 'long' ? 'The breath out is longer than the breath in. Most people find this the most calming.' : 'In and out take the same time.'}</p>
             </div>
             {r.breath.mode === 'paced' && (
               <div class="field">
@@ -454,28 +498,33 @@ function TuneSheet(o: {
       </div>
 
       <div class="sheet-section" id="tune-beat">
-        <h3><Icon name="wave" />Beat</h3>
-        <p class="explain">A soft, steady rhythm layered under the music. Pick a feel and see what suits you.</p>
+        <h3 class="group-head" style="justify-content:space-between"><span style="display:flex;gap:8px;align-items:center"><Icon name="wave" />Beat</span><a class="tiny" style="color:var(--faint);font-family:var(--sans);font-weight:600" href="#/evidence/beats-entrainment">Why?</a></h3>
+        <p class="explain">A soft, steady rhythm under the music. Pick a feel and see what suits you.</p>
         <Toggle label="Beat" checked={r.beat.on} onChange={(on) => set({ beat: { ...r.beat, on } })} />
         {r.beat.on && (
           <>
             <div class="field">
-              <div class="field-head"><span>Feel</span><span class="v">{BEAT_FEELS.find((f) => f.rate === r.beat.rate)?.hint ?? `${r.beat.rate} Hz`}</span></div>
+              <div class="field-head"><span>Feel</span><span class="v">{BEAT_FEELS.find((f) => f.rate === r.beat.rate)?.hint ?? ''}</span></div>
               <Seg value={r.beat.rate} label="Beat feel" onChange={(rate) => set({ beat: { ...r.beat, rate } })} options={BEAT_FEELS.map((f) => ({ v: f.rate, label: f.name }))} />
             </div>
-            <div class="field">
-              <div class="field-head"><span>Strength</span></div>
-              <Seg value={r.beat.strength} label="Beat strength" onChange={(strength) => set({ beat: { ...r.beat, strength } })} options={(['subtle', 'medium', 'strong'] as const).map((k) => ({ v: k, label: STRENGTH[k].label }))} />
-            </div>
-            <div class="field">
-              <div class="field-head"><span>Listening on</span></div>
-              <Seg value={r.beat.type} label="Beat type" onChange={(type) => set({ beat: { ...r.beat, type } })} options={[{ v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speakers' }]} />
-              <p class="explain" style="margin-top:6px">
-                {r.beat.type === 'binaural'
-                  ? `Headphones: each ear gets a slightly different tone and your brain hears the beat between them. Needs both earbuds in.${mono ? ' Your stereo check said mono, so choose Speakers.' : ''}`
-                  : 'Speakers: the music itself gently pulses. Works anywhere, even on one earbud.'}
-              </p>
-            </div>
+            <details class="more">
+              <summary>More beat options</summary>
+              <div class="field">
+                <div class="field-head"><span>Strength</span></div>
+                <Seg value={r.beat.strength} label="Beat strength" onChange={(strength) => set({ beat: { ...r.beat, strength } })} options={(['subtle', 'medium', 'strong'] as const).map((k) => ({ v: k, label: STRENGTH[k].label }))} />
+              </div>
+              <div class="field">
+                <div class="field-head"><span>Listening on</span></div>
+                <Seg value={r.beat.type} label="Beat type" onChange={(type) => set({ beat: { ...r.beat, type } })} options={[{ v: 'auto', label: 'Auto' }, { v: 'binaural', label: 'Headphones' }, { v: 'pulse', label: 'Speaker' }]} />
+                <p class="explain" style="margin-top:6px">
+                  {r.beat.type === 'binaural'
+                    ? `Headphones: each ear gets a slightly different tone and your brain hears the beat between them. Needs both earbuds in.${mono ? ' Your stereo check said mono, so Speaker will work better.' : ''}`
+                    : r.beat.type === 'pulse'
+                      ? 'Speaker: the music itself gently pulses. Works anywhere, even on one earbud.'
+                      : `Auto: uses headphones if you've confirmed them in the headphone check, otherwise a gentle pulse that works on any speaker. Right now: ${resolveBeatType('auto') === 'binaural' ? 'headphones' : 'speaker'}.`}
+                </p>
+              </div>
+            </details>
           </>
         )}
       </div>
@@ -493,7 +542,6 @@ function TuneSheet(o: {
         </div>
         <button class="link-btn" onClick={o.onReset}>Reset {mood.name.toLowerCase()} to the starting point</button>
       </div>
-      <button class="btn block cream" style="margin-top:12px" onClick={o.onClose}>Done</button>
     </Sheet>
   );
 }

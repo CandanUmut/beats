@@ -1,7 +1,7 @@
 // "Find my sound": a quick taste test. Hear a few versions back to back,
 // pick what feels best, and the app saves it as your version of the mood.
 
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import * as engine from '../../audio/engine';
 import { MOOD_BY_ID, BEAT_FEELS, feelName, type MoodId, type Recipe } from '../../data/moods';
 import { settings, recipeFor, saveRecipe } from '../../data/settings';
@@ -12,7 +12,13 @@ import { go } from '../router';
 
 const SLOT = 25; // seconds per option before moving on
 
-type Stage = 'intro' | 'music' | 'beat' | 'done';
+type Stage = 'intro' | 'music' | 'beat' | 'feel' | 'done';
+
+function shuffle<T>(a: T[]): T[] {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; }
+  return b;
+}
 
 export function Tuner({ moodId }: { moodId: MoodId }) {
   const mood = MOOD_BY_ID[moodId];
@@ -24,24 +30,28 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
   const [now, setNow] = useState(0);
   const [choice, setChoice] = useState<Recipe>(base);
   const keys = useRef<Record<string, string | null>>({});
-  const musicOpts = [...new Set(mood.tasteMusic)].filter((id) => SOUND_BY_ID[id]);
-  const beatOpts = mood.tasteBeats;
-  const opts = stage === 'beat' ? beatOpts.length : musicOpts.length;
+  // Shuffled so the current favourite doesn't always play first.
+  const musicOpts = useMemo(() => shuffle([...new Set(mood.tasteMusic)].filter((id) => SOUND_BY_ID[id])), []);
+  const beatOpts = useMemo(() => shuffle([base.beat.rate || 6, 0]), []);
+  const feelOpts = useMemo(() => shuffle([...new Set(mood.tasteBeats.filter((r) => r > 0))]).slice(0, 3), []);
+  const rateOpts = (st: Stage): number[] => (st === "beat" ? beatOpts : feelOpts);
+  const optsFor = (st: Stage): (string | number)[] => (st === "music" ? musicOpts : rateOpts(st));
+  const opts = optsFor(stage).length;
 
   // Clock for the progress bars and auto-advance.
   useEffect(() => {
-    if (stage !== 'music' && stage !== 'beat') return;
+    if (stage !== 'music' && stage !== 'beat' && stage !== 'feel') return;
     const id = setInterval(() => setNow(performance.now() / 1000), 200);
     return () => clearInterval(id);
   }, [stage]);
   useEffect(() => {
-    if ((stage === 'music' || stage === 'beat') && now - slotStart > SLOT) select((idx + 1) % opts);
+    if ((stage === 'music' || stage === 'beat' || stage === 'feel') && now - slotStart > SLOT) select((idx + 1) % opts);
   }, [now]);
   useEffect(() => () => { void engine.stopSession(1); }, []);
 
   function recipeAt(st: Stage, i: number, r: Recipe): Recipe {
     if (st === 'music') return { ...r, sound: musicOpts[i] };
-    const rate = beatOpts[i];
+    const rate = rateOpts(st)[i];
     return { ...r, beat: { ...r.beat, on: rate > 0, rate: rate || r.beat.rate } };
   }
 
@@ -71,16 +81,19 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
     engine.updateParams(recipeParams(r, { volume: settings.value.volume }));
   }
 
+  function goTo(st: Stage, r: Recipe) {
+    setStage(st);
+    setIdx(0);
+    setSlotStart(performance.now() / 1000);
+    engine.updateParams(recipeParams(recipeAt(st, 0, r), { volume: settings.value.volume }));
+  }
+
   function pick(i: number) {
     const r = recipeAt(stage, i, choice);
     setChoice(r);
-    if (stage === 'music') {
-      setStage('beat');
-      setIdx(0);
-      setSlotStart(performance.now() / 1000);
-      const first = recipeAt('beat', 0, r);
-      engine.updateParams(recipeParams(first, { volume: settings.value.volume }));
-    } else {
+    if (stage === 'music') goTo('beat', r);
+    else if (stage === 'beat' && r.beat.on && feelOpts.length > 1) goTo('feel', r);
+    else {
       setStage('done');
       void engine.stopSession(2.5);
     }
@@ -92,31 +105,32 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
       const it = SOUND_BY_ID[musicOpts[i]];
       return { t: shortTitle(musicOpts[i]), s: it?.category === 'classical' ? it.subtitle : it?.subtitle ?? '' };
     }
-    const rate = beatOpts[i];
+    const rate = rateOpts(stage)[i];
     if (!rate) return { t: 'No beat', s: 'Just the music and breathing' };
+    if (stage === 'beat') return { t: 'With a soft beat', s: 'A gentle rhythm under the music' };
     const f = BEAT_FEELS.find((x) => x.rate === rate);
-    return { t: `${f?.name ?? feelName(rate)} beat`, s: f?.hint ?? `${rate} Hz` };
+    return { t: f?.name ?? feelName(rate), s: f?.hint ?? '' };
   };
 
   return (
     <div class={`accent-${mood.accent}`}>
       <TopBar onBack={() => go(`/m/${moodId}`)} />
-      {stage !== 'intro' && stage !== 'done' && <Steps n={2} at={stage === 'music' ? 0 : 1} />}
+      {stage !== 'intro' && stage !== 'done' && <Steps n={3} at={stage === 'music' ? 0 : stage === 'beat' ? 1 : 2} />}
       {stage === 'intro' && (
         <>
           <div class="session-head"><div class="eyebrow">Find my sound · {mood.name}</div><h1>A quick <em>taste test</em></h1></div>
-          <p class="lead">You'll hear a few versions, about {SLOT} seconds each. Tap any one to hear it again, and press <b>This one</b> on the version that feels best. First the music, then the beat. About three minutes.</p>
+          <p class="lead">You'll hear a few versions, about {SLOT} seconds each. Tap any one to hear it again, and press <b>This one</b> on the version that feels best. About two minutes.</p>
           <div class="card">
             <p class="small" style="margin:0">Put on headphones if you have them, settle in, and listen for which one makes you feel more <b>{mood.name.toLowerCase()}</b>. There's no wrong answer.</p>
           </div>
           <button class="btn primary block" disabled={!!busy} onClick={begin}>{busy ?? 'Start listening'}</button>
         </>
       )}
-      {(stage === 'music' || stage === 'beat') && (
+      {(stage === 'music' || stage === 'beat' || stage === 'feel') && (
         <>
           <div class="session-head">
-            <div class="eyebrow">{stage === 'music' ? 'Step 1 · Music' : 'Step 2 · Beat'}</div>
-            <h1>{stage === 'music' ? 'Which music?' : 'Which beat?'}</h1>
+            <div class="eyebrow">{stage === 'music' ? 'Step 1 · Music' : stage === 'beat' ? 'Step 2 · Beat' : 'Step 3 · Feel'}</div>
+            <h1>{stage === 'music' ? 'Which music?' : stage === 'beat' ? 'Beat or no beat?' : 'Which feel?'}</h1>
           </div>
           <p class="muted small">Now playing <b style="color:var(--text)">{label(idx).t}</b>. It moves on by itself; tap to go back.</p>
           <div class="taste">
@@ -143,6 +157,7 @@ export function Tuner({ moodId }: { moodId: MoodId }) {
             <div class="eyebrow" style="margin-top:8px">Your {mood.name.toLowerCase()} sound</div>
             <h2 style="margin:6px 0">{shortTitle(choice.sound)}</h2>
             <p class="muted" style="margin:0">{choice.beat.on ? `${feelName(choice.beat.rate)} beat` : 'No beat'}</p>
+            <p class="tiny faint" style="margin:10px 0 0">Taste changes from day to day. Run it again any time.</p>
           </div>
           <button class="btn primary block" onClick={() => { saveRecipe(moodId, choice); go(`/m/${moodId}`); }}>Save and start</button>
           <button class="btn ghost block" style="margin-top:8px" onClick={() => { setChoice(base); setStage('intro'); }}><Icon name="spark" /> Try again</button>

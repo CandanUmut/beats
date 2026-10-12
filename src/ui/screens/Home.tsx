@@ -65,14 +65,12 @@ export function Home() {
 
       <div class="quick-row">
         <button onClick={() => go('/move')}><Icon name="walk" />Move</button>
-        <button onClick={() => go('/lab')}><Icon name="flask" />Lab</button>
-        <button onClick={() => go('/evidence')}><Icon name="book" />Research</button>
+        <button onClick={() => go('/sleep/diary')}><Icon name="moon" />Sleep log</button>
+        <button onClick={() => go('/evidence')}><Icon name="book" />Why it works</button>
         <button onClick={() => go('/settings')}><Icon name="gear" />Settings</button>
       </div>
 
-      <p class="tiny faint center" style="margin-top:22px">
-        Built on published research on breathing, music and sound. A wellness tool, not a medical device. <a href="#/about">About</a>
-      </p>
+      <p class="tiny faint center" style="margin-top:22px"><a href="#/about">About Steady</a></p>
     </>
   );
 }

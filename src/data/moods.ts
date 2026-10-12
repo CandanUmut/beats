@@ -11,7 +11,8 @@ export interface BeatSetting {
   on: boolean;
   /** Beat rate in Hz. */
   rate: number;
-  type: 'binaural' | 'pulse';
+  /** 'auto' = headphone beat if headphones were confirmed, otherwise a pulse that works on speakers. */
+  type: 'auto' | 'binaural' | 'pulse';
   strength: 'subtle' | 'medium' | 'strong';
 }
 
@@ -45,10 +46,10 @@ export interface Mood {
 }
 
 export const BEAT_FEELS: { rate: number; name: string; hint: string }[] = [
-  { rate: 2, name: 'Deep', hint: 'very slow, for sleep (2 Hz)' },
-  { rate: 6, name: 'Dreamy', hint: 'slow and soft (6 Hz)' },
-  { rate: 10, name: 'Easy', hint: 'relaxed but awake (10 Hz)' },
-  { rate: 14, name: 'Alert', hint: 'steady and clear (14 Hz)' },
+  { rate: 2, name: 'Deep', hint: 'very slow, for sleep' },
+  { rate: 6, name: 'Dreamy', hint: 'slow and soft' },
+  { rate: 10, name: 'Easy', hint: 'relaxed but awake' },
+  { rate: 14, name: 'Alert', hint: 'steady and clear' },
 ];
 
 export function feelName(rate: number): string {
@@ -63,7 +64,7 @@ export const STRENGTH: Record<BeatSetting['strength'], { levelDb: number; depth:
 };
 
 const paced = (bpm: number, ratio = 1.5): BreathSettings => ({ mode: 'paced', bpm, ratio });
-const beat = (rate: number, strength: BeatSetting['strength'] = 'medium'): BeatSetting => ({ on: true, rate, type: 'binaural', strength });
+const beat = (rate: number, strength: BeatSetting['strength'] = 'medium'): BeatSetting => ({ on: true, rate, type: 'auto', strength });
 
 export const MOODS: Mood[] = [
   {
@@ -137,7 +138,7 @@ export const MOODS: Mood[] = [
     line: 'Lift your mood a little',
     flow: 'breathe',
     accent: 'marigold',
-    fact: 'Five minutes a day of cyclic sighing lifted mood more than meditation in a 108-person study.',
+    fact: 'Five minutes a day of sighing breaths lifted mood more than meditation in a 108-person study.',
     evidence: 'breathing',
     recipe: { sound: 'piece:debussy-arab-1', breathing: true, breath: { mode: 'sigh', bpm: 6, ratio: 1.5 }, swellDb: 4, beat: beat(10), minutes: 5 },
     tasteMusic: ['piece:debussy-arab-1', 'lofi', 'lullaby'],

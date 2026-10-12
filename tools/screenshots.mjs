@@ -26,18 +26,14 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await shot('01-safety');
   await page.check('input[type=checkbox]');
   await page.click('text=Continue');
-  await shot('02-headphones');
-  await page.click('text=Skip (no headphones right now)');
-  await shot('03-stereo');
-  await page.click('text=Skip');
   await shot('04-level');
-  await page.click('text=Done');
+  await page.click('text=Start');
   await page.waitForSelector('.mood');
   await shot('05-home');
   const routes = [
     ['06-calm', '#/m/calm'], ['07-grounded', '#/m/grounded'], ['08-sleepy', '#/m/sleepy'], ['09-focused', '#/m/focused'],
     ['10-brighter', '#/m/brighter'], ['10b-relaxed', '#/m/relaxed'], ['11-move', '#/move'], ['12-evidence', '#/evidence'], ['13-why-beats-anger', '#/evidence/beats-anger'],
-    ['14-myths', '#/myths'], ['15-settings', '#/settings'], ['16-about', '#/about'], ['17-sleep-diary', '#/sleep/diary'], ['18-lab', '#/lab'],
+    ['14-myths', '#/myths'], ['02-headphones', '#/recheck'], ['15-settings', '#/settings'], ['16-about', '#/about'], ['17-sleep-diary', '#/sleep/diary'], ['18-lab', '#/lab'],
   ];
   for (const [name, hash] of routes) {
     await page.goto(base + hash);
@@ -75,7 +71,7 @@ for (const [label, viewport] of [['phone', { width: 390, height: 844 }], ['deskt
   await shot('20-help-sheet', false);
   await page.click('.sheet .btn.block');
   // Tune sheet, then the full music library, then a strings piece.
-  await page.click('.side-btn');
+  await page.click('.recipe button');
   await page.waitForSelector('.sheet');
   await shot('21b-tune-sheet', false);
   await page.click('text=All music');
