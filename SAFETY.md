@@ -15,7 +15,7 @@ Epilepsy; severe tinnitus, sound sensitivity or hearing loss in one ear; psychos
 - Default session lengths of 30 minutes or less; sleep sessions fade out and never loop all night.
 - Weekly listening log using a conservative assumed level (the browser can't measure real loudness).
 - No flashing or flickering visuals anywhere. Instrument animations fade smoothly; with "reduce motion" on, falling notes are turned off.
-- Beats are labeled Experimental. They are added automatically only in Relax, Sleep, Focus and Breathe (owner's choice, switchable in Settings), never in Calm down or Ride an urge, and always 15 dB below the music.
+- Beats are labeled Experimental. A soft beat is on by default in every mood, including Calm and Grounded (ride an urge). This is the owner's choice. The research found no benefit of beats for anger or urges, and one small study found anger went up with beats alone, so if a beat ever makes you feel more wound up, switch it off: open the mood, tap **Tune**, then **Beat**, or pick "No beat" in **Find my sound**. The app remembers your choice for that mood. With headphones, the beat tones always sit at least 12 dB below the music (18 dB at the default strength); on a speaker, the beat is a gentle pulse in the music's own volume, not an extra sound.
 - Help lines (US: 988, SAMHSA 1-800-662-4357; directory for other countries) one tap away. Edit `src/data/helplines.ts` to add regions.
 - Nudges toward professional support if the urge flow is used more than 5 times in a week, or the calm-down flow on 12+ of the last 14 days.
 

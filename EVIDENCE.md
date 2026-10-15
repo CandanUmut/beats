@@ -13,8 +13,8 @@ The app's grades come from [docs/RESEARCH.md](docs/RESEARCH.md). The data the ap
 | Bedtime music | Weak–Moderate | **App's judgment**: the research gives no explicit grade. |
 | Low-distraction, lyric-free sound | Moderate | |
 | Beats: entrainment ("tuning" the brain) | Weak | Measurable response during listening: Moderate. Monaural > binaural: Moderate. |
-| Beats for anger | No evidence | Possible harm: anger rose with beats alone in a ~15-person study. Not offered in the Calm flow. |
-| Beats for urges | No evidence | No trial shows reduced craving. |
+| Beats for anger | No evidence | Possible harm: anger rose with beats alone in a ~15-person study. Calm still has a soft beat on by default (owner's choice); the app's Research page says so and explains how to switch it off. |
+| Beats for urges | No evidence | No trial shows reduced craving. Grounded has a soft beat on by default (owner's choice); switch it off in Tune. |
 | Beats for relaxing | Weak (vs music), Weak–Moderate (vs pink noise) | The two better trials are company-linked (LUCID). |
 | Beats around medical procedures | Weak that the beat matters | Large effect vs blank audio, I² ≈ 92%. |
 | Beats for sleep | Weak | |

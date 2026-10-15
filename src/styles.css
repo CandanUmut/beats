@@ -595,8 +595,8 @@ h1 em { display: block; text-wrap: balance; }
   pointer-events: none;
   transition: transform 0.35s ease, opacity 0.35s ease;
 }
-/* Out of the way while you scroll, and never over a sheet. */
-.cat-floor.ducked { transform: translateY(62%); opacity: 0.4; }
+/* Out of sight whenever content could be behind him, and never over a sheet. */
+.cat-floor.ducked { transform: translateY(100%); opacity: 0; visibility: hidden; transition: transform 0.35s ease, opacity 0.35s ease, visibility 0s linear 0.35s; }
 .cat-floor.ducked .cat { pointer-events: none; }
 .sheet-open .cat-floor { display: none; }
 .cat-floor::before {

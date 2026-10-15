@@ -244,7 +244,7 @@ export function Cat() {
       const el = document.querySelector(g.sel) as HTMLElement | null;
       const fl = floor.current;
       const html = document.documentElement;
-      if (!el || !fl || inSession() || html.classList.contains('sheet-open')) return;
+      if (!el || !fl || inSession() || html.classList.contains('sheet-open') || fl.classList.contains('ducked')) return;
       const er = el.getBoundingClientRect();
       const fr = fl.getBoundingClientRect();
       const target = clamp(er.left + er.width / 2 - fr.left - W / 2, 0, fl.clientWidth - W);
@@ -257,19 +257,25 @@ export function Cat() {
     return () => clearTimeout(id);
   }, [route.value, on]);
 
-  // Duck out of the way while you scroll; come back when you stop.
+  // Never over content or buttons. The page keeps an empty strip at its very
+  // bottom for him (or a sticky button band does), so he only shows while that
+  // strip is on screen; the rest of the time he steps out of sight.
   useEffect(() => {
     if (!on) return;
-    let tm = 0;
-    const onScroll = () => {
+    let raf = 0;
+    const check = () => {
+      raf = 0;
       const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8;
-      setDucked(!atEnd);
-      clearTimeout(tm);
-      if (!atEnd) tm = window.setTimeout(() => setDucked(false), 1200);
+      setDucked(!atEnd && !document.querySelector('.sticky-next'));
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { window.removeEventListener('scroll', onScroll); clearTimeout(tm); };
-  }, [on]);
+    const soon = () => { if (!raf) raf = requestAnimationFrame(check); };
+    check();
+    window.addEventListener('scroll', soon, { passive: true });
+    window.addEventListener('resize', soon);
+    const ro = new ResizeObserver(soon);
+    ro.observe(document.body);
+    return () => { window.removeEventListener('scroll', soon); window.removeEventListener('resize', soon); ro.disconnect(); cancelAnimationFrame(raf); };
+  }, [on, route.value]);
 
   function pet(tap: boolean) {
     const c = st.current;

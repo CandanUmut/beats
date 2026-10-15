@@ -18,7 +18,7 @@ export interface Settings {
   assumedDb: number;
   /** Last sound picked per goal. */
   lastSound: Record<string, string>;
-  /** Add the experimental beat layer automatically (not in Calm down / Ride an urge). */
+  /** Not read anywhere: the beat is set per mood in its recipe (src/data/moods.ts), on by default in every mood. */
   autoBeats: boolean;
   beatMode: 'binaural' | 'pulse';
   /** Show the instrument animation or the breathing circle. */

@@ -5,4 +5,4 @@ screenshots/*.tmp.png
 .DS_Store
 tools/.venv
 __pycache__
-screenshots/
+/screenshots/
