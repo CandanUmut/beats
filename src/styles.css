@@ -589,27 +589,35 @@ h1 em { display: block; text-wrap: balance; }
 
 /* The cat */
 .app.with-cat { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
-.cat-floor {
+.cat-floor, .cat-ruler {
   position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); z-index: 30;
   height: 80px; max-width: 560px; margin: 0 auto;
   pointer-events: none;
-  transition: transform 0.35s ease, opacity 0.35s ease;
 }
-/* Out of sight whenever content could be behind him, and never over a sheet. */
-.cat-floor.ducked { transform: translateY(100%); opacity: 0; visibility: hidden; transition: transform 0.35s ease, opacity 0.35s ease, visibility 0s linear 0.35s; }
-.cat-floor.ducked .cat { pointer-events: none; }
+/* An invisible twin of his floor, so he can always tell where it is (and how
+   much of the top of the screen a notch takes). */
+.cat-ruler { visibility: hidden; z-index: -1; scroll-margin-top: calc(env(safe-area-inset-top) + 4px); }
+/* On the floor the screen's bottom edge cuts him off, so he can peek over it. */
+.cat-floor:not(.perched) { clip-path: inset(-100vh -100vw 0 -100vw); }
+/* On top of a card: his layer sits on the page, so he scrolls with the card.
+   Peeking over it, the card's top edge (7px up from the layer's bottom) hides the rest of him. */
+.cat-floor.perched { position: absolute; right: auto; bottom: auto; margin: 0; max-width: none; }
+.cat-floor.perched.peeking { clip-path: inset(-100vh -100vw 7px -100vw); }
 .sheet-open .cat-floor { display: none; }
-.cat-floor::before {
-  content: ''; position: absolute; left: 4%; right: 4%; bottom: 6px; height: 10px; border-radius: 50%;
+.cat { position: absolute; left: 0; bottom: 4px; width: 100px; height: 75px; padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; touch-action: pan-y; transform-origin: 50% 100%; will-change: transform; -webkit-tap-highlight-color: transparent; }
+.cat.gone { pointer-events: none; }
+/* His own soft shadow (not while he's in the air). */
+.cat::before {
+  content: ''; position: absolute; left: 14%; right: 14%; bottom: -2px; height: 9px; border-radius: 50%;
   background: radial-gradient(closest-side, rgba(0, 0, 0, 0.28), transparent);
 }
-.cat { position: absolute; left: 0; bottom: 4px; width: 100px; height: 75px; padding: 0; border: 0; background: none; pointer-events: auto; cursor: pointer; touch-action: pan-y; will-change: transform; -webkit-tap-highlight-color: transparent; }
+.cat.hopping::before { opacity: 0; }
 .cat svg { display: block; overflow: visible; }
 .cat:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
 .cat-bowl { position: absolute; bottom: 6px; width: 34px; height: 14px; pointer-events: none; }
 .cat-fly { position: absolute; width: 20px; height: 16px; pointer-events: none; }
 .cat-heart { position: absolute; width: 16px; height: 14px; pointer-events: none; transform: translateX(-50%); }
-@media (min-width: 720px) { .cat-floor { max-width: 640px; } }
+@media (min-width: 720px) { .cat-floor, .cat-ruler { max-width: 900px; } }
 .in-session .cat-floor { opacity: 0.85; }
 
 .canvas-hint.on-scene { text-shadow: 0 1px 12px rgba(10, 8, 6, 0.9); }
