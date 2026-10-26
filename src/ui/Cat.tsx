@@ -4,7 +4,11 @@
 // then, on Home) chases a butterfly. During a session he kneads, curls up and
 // sleeps, breathing at your pace. Pet him and he purrs; pet him a lot and he
 // rolls over. He never talks, only meows, and the first time you open a
-// screen he walks over to the thing to tap.
+// screen he hops over to the thing to tap. He never sits on text or buttons:
+// he sits along the bottom of the screen or on top of a card or picture,
+// wherever nothing is behind him, squeezes a bit into a tight spot, now and
+// then hops somewhere else, and when there is no room at all he peeks over
+// the bottom of the screen or the top of a card instead.
 
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { route } from './router';
@@ -12,15 +16,47 @@ import { settings, updateSettings } from '../data/settings';
 import { meow, purr } from '../audio/catSounds';
 import * as engine from '../audio/engine';
 import { breathAt, type BreathPattern } from '../audio/dsp/breath';
+import { allPerches, bestSpot, perchNow, spanAt, type Geometry, type Peek, type Perch, type Span } from './catRoom';
 
 type Pose =
   | 'loaf' | 'sit' | 'look' | 'walk' | 'curl' | 'yawn' | 'stretch' | 'groom'
-  | 'eat' | 'petted' | 'knead' | 'crouch' | 'pounce' | 'roll';
+  | 'eat' | 'petted' | 'knead' | 'crouch' | 'pounce' | 'roll' | 'peek';
 
 interface Step { pose: Pose; dur?: number; to?: number; dir?: 1 | -1 }
 
 const W = 100; // rendered cat width, px
+const H = W * 0.75;
+const LIFT = 4; // his box sits this far above the bottom of the floor
+const FLOOR_H = 80; // his layer's height
+const FEET = 3; // on a card, his paws overlap its top edge this much
+/** Seconds in the air hopping from one place to another, longer for a long hop. */
+const hopTime = (dist: number) => clamp(0.45 + dist / 1200, 0.5, 0.85);
 const SPEED = 44; // px per second
+/** The sizes he may take on the floor, biggest first. */
+const SIZES = [1, 0.86, 0.72];
+/** Peeking over the bottom of the screen or the top of a card: the edge cuts
+ *  him at this height in the drawing (just under his paws), and what shows is
+ *  about this wide and tall. */
+const PEEK_LEDGE = 52;
+const PEEK: Peek = { w: 36, h: PEEK_LEDGE * (W / 120) - 4 };
+/** How far down he sinks to peek over the floor's edge, or a card's. */
+const peekDy = (card: boolean) => H - PEEK_LEDGE * (W / 120) + (card ? -FEET : LIFT);
+const AWAY_DY = LIFT + H + 4;
+
+/** Where he is: on the floor (`el` null) or on top of `el`; sitting, peeking
+ *  over its edge, or out of sight. `lo`/`hi` is his free stretch along
+ *  it. On a card his layer sits on the page at left/top/width, so he scrolls
+ *  with the card. */
+interface Place {
+  el: Element | null;
+  mode: 'on' | 'peek' | 'away';
+  s: number;
+  lo: number;
+  hi: number;
+  left: number;
+  top: number;
+  width: number;
+}
 
 const F = {
   fur: '#eba667',
@@ -102,7 +138,11 @@ export function Cat() {
   const on = s.cat;
   const still = useReducedMotion();
   const [, force] = useState(0);
-  const [ducked, setDucked] = useState(false);
+  const place = useRef<Place>({ el: null, mode: 'away', s: 1, lo: 0, hi: 0, left: 0, top: 0, width: 0 });
+  const anim = useRef({ dy: AWAY_DY, s: 1, op: 0 });
+  const hop = useRef<{ ox: number; oy: number; at: number; dur: number } | null>(null);
+  const bowlOk = useRef(false);
+  const ruler = useRef<HTMLDivElement>(null);
   const st = useRef<State>({ pose: 'loaf', x: 70, dir: -1, until: Infinity, targetX: null, since: 0, queue: [], nextEvent: performance.now() / 1000 + 8, pets: [], slowBlink: -10 });
   const t = useRef(0);
   const floor = useRef<HTMLDivElement>(null);
@@ -124,6 +164,92 @@ export function Cat() {
   useEffect(() => {
     if (still) Object.assign(st.current, { pose: 'loaf', targetX: null, queue: [], until: Infinity });
   }, [still]);
+
+  // --- Where he sits ---------------------------------------------------------
+
+  const geometry = (): Geometry | null => {
+    const r = ruler.current;
+    // (scroll-margin-top carries the safe area's top inset, see .cat-ruler)
+    return r && { floor: r.getBoundingClientRect(), top: parseFloat(getComputedStyle(r).scrollMarginTop) || 4, h: H, w: W, lift: LIFT, feet: FEET, sizes: SIZES };
+  };
+  /** His feet, middle, on screen right now. */
+  const whereNow = (): [number, number] => {
+    const r = floor.current!.getBoundingClientRect();
+    return [r.left + st.current.x + W / 2, r.bottom - LIFT + anim.current.dy];
+  };
+  /** Stay on `p` (it may have moved), in stretch `sp` at size `s`. */
+  const seat = (p: Perch, s: number, sp: Span, mode: Place['mode'] = 'on') => {
+    Object.assign(place.current, { el: p.el, mode, s, lo: sp[0], hi: sp[1], left: p.left + window.scrollX, top: p.foot + window.scrollY - FLOOR_H + LIFT, width: p.width });
+    const bx = bowlX(p.width);
+    bowlOk.current = !p.el && mode === 'on' && sp[0] <= bx && sp[1] >= bx + 34;
+  };
+  /** Go somewhere else: hop there if he's showing, else pop up there. */
+  const moveTo = (p: Perch, s: number, sp: Span, cx: number, mode: Place['mode'] = 'on') => {
+    const c = st.current, a = anim.current;
+    const shown = place.current.mode !== 'away' && a.op > 0.5;
+    const from = whereNow();
+    seat(p, s, sp, mode);
+    c.x = cx - W / 2;
+    if (c.pose === 'walk') { c.queue = []; Object.assign(c, { pose: 'sit', targetX: null, until: performance.now() / 1000 + 3 }); }
+    const to: [number, number] = [p.left + cx, p.foot];
+    if (shown && mode === 'on' && !stillRef.current && Math.hypot(from[0] - to[0], from[1] - to[1]) > 6) {
+      hop.current = { ox: from[0] - to[0], oy: from[1] - to[1], at: performance.now() / 1000, dur: hopTime(Math.hypot(from[0] - to[0], from[1] - to[1])) };
+      c.dir = from[0] > to[0] ? -1 : 1;
+      Object.assign(a, { dy: 0, s });
+    } else if (!stillRef.current) {
+      hop.current = null;
+      Object.assign(a, { dy: p.el ? 16 : AWAY_DY, op: 0 });
+    }
+  };
+  /** Check his place against what's on screen now. Mid-scroll he only ducks
+   *  (or rides along on his card); once things are `settled` he moves on. */
+  const measure = (settled: boolean) => {
+    const fl = floor.current, g = geometry();
+    if (!fl || !g || document.documentElement.classList.contains('sheet-open')) return;
+    const pl = place.current;
+    const cx = st.current.x + W / 2;
+    const fits = (p: Perch | null, mode: Place['mode']) => {
+      for (const z of p?.sizes ?? []) {
+        const sp = spanAt(z.spans, cx, mode === 'peek' ? PEEK.w / 2 : (W * z.s) / 2);
+        if (sp) { seat(p!, z.s, sp, mode); return true; }
+      }
+      return false;
+    };
+    // Still fine where he is (a sitting cat may also sit back up from a peek)?
+    const here = perchNow(pl.el, fl, g);
+    if (fits(here, 'on') || (pl.mode === 'peek' && fits(perchNow(pl.el, fl, g, PEEK), 'peek'))) return;
+    if (!settled) {
+      // Mid-scroll: on a card he rides along with it (even off screen), and
+      // only steps away if something slides over him; on the floor he ducks.
+      if (pl.el) { if (here) pl.mode = 'away'; return; }
+      if (!fits(perchNow(null, fl, g, PEEK), 'peek')) pl.mode = 'away';
+      return;
+    }
+    const [x, y] = whereNow();
+    const spot = bestSpot(allPerches(fl, g), x, y, W);
+    if (spot) { moveTo(spot.p, spot.s, spot.sp, spot.cx); return; }
+    // No room to sit anywhere: peek over an edge, or stay out of sight.
+    const peek = bestSpot(allPerches(fl, g, PEEK), x, y, PEEK.w);
+    if (peek) moveTo(peek.p, 1, peek.sp, peek.cx, 'peek');
+    else pl.mode = 'away';
+  };
+  /** Now and then he hops up onto something else on screen, usually nearby. */
+  const explore = (): boolean => {
+    const fl = floor.current, g = geometry();
+    if (!fl || !g || place.current.mode !== 'on') return false;
+    const [x, y] = whereNow();
+    const away = (p: Perch) => Math.abs(p.foot - y) + Math.max(0, p.left - x, x - p.left - p.width);
+    const all = allPerches(fl, g)
+      .filter((p) => p.el !== place.current.el && p.sizes[0]?.s === 1 && p.sizes[0].spans.length)
+      .sort((a, b) => away(a) - away(b));
+    const near = all.filter((p) => away(p) < 360);
+    const pick = near.length ? near : all.slice(0, 1);
+    const p = pick[Math.floor(Math.random() * pick.length)];
+    if (!p) return false;
+    const sp = p.sizes[0].spans[Math.floor(Math.random() * p.sizes[0].spans.length)];
+    moveTo(p, 1, sp, sp[0] + W / 2 + Math.random() * (sp[1] - sp[0] - W));
+    return true;
+  };
 
   // Eyes follow your finger or cursor.
   useEffect(() => {
@@ -155,8 +281,8 @@ export function Cat() {
       if (next) begin(c, next, sec);
       else {
         Object.assign(c, { pose: 'loaf', until: Infinity, targetX: null, since: sec });
-        // One small event every two to three minutes; otherwise he loafs.
-        c.nextEvent = sec + 110 + Math.random() * 70;
+        // One small event every minute or two; otherwise he loafs.
+        c.nextEvent = sec + 70 + Math.random() * 60;
       }
     };
     const pickEvent = (c: State, sec: number) => {
@@ -164,7 +290,11 @@ export function Cat() {
       const r = Math.random();
       const night = hour() >= 22 || hour() < 6;
       const home = route.value === '/';
-      const spot = 20 + Math.random() * (fw - W - 40);
+      const pl = place.current;
+      const half = (W * pl.s) / 2;
+      const spot = pl.lo + half + Math.random() * Math.max(0, pl.hi - pl.lo - 2 * half) - W / 2;
+      const bx = bowlX(fw);
+      const canEat = bowlOk.current && pl.lo <= bx && pl.hi >= bx + 26 + W;
       let q: Step[];
       if (night && r < 0.7) q = [{ pose: 'knead', dur: 2.5 }, { pose: 'curl', dur: 60 + Math.random() * 60 }, { pose: 'stretch', dur: 2.5 }];
       else if (home && !chasedToday() && r < 0.18) {
@@ -173,10 +303,11 @@ export function Cat() {
         fly.current = { x: c.x + W / 2 + dir * 160, y: 30, vx: 0, vy: 0, on: true };
         q = [{ pose: 'look', dur: 1.6, dir }, { pose: 'crouch', dur: 1.8, dir }, { pose: 'pounce', dur: 0.7, dir }, { pose: 'look', dur: 2.2, dir }];
       }
-      else if (r < 0.35) q = [{ pose: 'walk', to: spot }, { pose: 'sit', dur: 5 }];
+      else if (r < 0.3 && explore()) q = [{ pose: 'sit', dur: 5 }];
+      else if (r < 0.4) q = [{ pose: 'walk', to: spot }, { pose: 'sit', dur: 5 }];
       else if (r < 0.5) q = [{ pose: 'groom', dur: 4.5 }];
       else if (r < 0.65) q = [{ pose: 'yawn', dur: 2.4 }, { pose: 'stretch', dur: 2.6 }];
-      else if (r < 0.82) q = [{ pose: 'walk', to: bowlX(fw) + 26 }, { pose: 'eat', dur: 6, dir: -1 }];
+      else if (r < 0.82) q = canEat ? [{ pose: 'walk', to: bx + 26 }, { pose: 'eat', dur: 6, dir: -1 }] : [{ pose: 'groom', dur: 4.5 }];
       else q = [{ pose: 'knead', dur: 2.5 }, { pose: 'curl', dur: 30 + Math.random() * 40 }, { pose: 'stretch', dur: 2.5 }];
       c.queue = q;
       advance(c, sec);
@@ -191,12 +322,35 @@ export function Cat() {
       const fw = floor.current?.clientWidth ?? 360;
       const session = inSession();
       // Into a session: knead, then curl up and breathe along. Out: stretch, slow blink.
-      if (session && !wasSession) { c.queue = [{ pose: 'knead', dur: 2.6 }, { pose: 'curl' }]; begin(c, { pose: 'walk', to: 6 }, sec); fly.current = null; }
+      // (He walks to the left end of whatever free stretch he is in.)
+      if (session && !wasSession) { c.queue = [{ pose: 'knead', dur: 2.6 }, { pose: 'curl' }]; begin(c, { pose: 'walk', to: -W }, sec); fly.current = null; }
       if (!session && wasSession) { c.queue = [{ pose: 'sit', dur: 4 }]; begin(c, { pose: 'stretch', dur: 2.6 }, sec); c.slowBlink = sec + 2.8; }
       wasSession = session;
       breath.current = session && sessionPattern ? breathAt(sessionPattern, engine.sessionTime()).level : 0.5;
 
-      if (c.pose === 'walk' && c.targetX !== null) {
+      // Keep to his free stretch.
+      const p = place.current;
+      const a = anim.current;
+      const seated = p.mode === 'on';
+      if (hop.current && sec - hop.current.at > hop.current.dur) hop.current = null;
+      if (seated) {
+        const half = (W * p.s) / 2;
+        const lo = p.lo + half - W / 2, hi = p.hi - half - W / 2;
+        c.x = clamp(c.x, lo, Math.max(lo, hi));
+        if (c.targetX !== null) c.targetX = clamp(c.targetX, lo, Math.max(lo, hi));
+      }
+      const goal = { dy: seated ? 0 : p.mode === 'peek' ? peekDy(!!p.el) : AWAY_DY, s: seated ? p.s : 1, op: p.mode === 'away' ? 0 : 1 };
+      const k = stillRef.current ? 1 : Math.min(1, dt * 9);
+      a.dy += (goal.dy - a.dy) * k;
+      a.s += (goal.s - a.s) * k;
+      a.op += (goal.op - a.op) * Math.min(1, k * 1.4);
+      const settling = Math.abs(goal.dy - a.dy) > 0.3 || Math.abs(goal.s - a.s) > 0.004 || Math.abs(goal.op - a.op) > 0.01;
+      if (!settling) Object.assign(a, goal);
+
+      if (!seated || hop.current) {
+        // Peeking, away or mid-hop: he waits where he is, and nothing new starts.
+        if (sec > c.until && c.pose !== 'walk') advance(c, sec);
+      } else if (c.pose === 'walk' && c.targetX !== null) {
         const d = c.targetX - c.x;
         c.dir = d >= 0 ? 1 : -1;
         const step = SPEED * dt;
@@ -222,10 +376,10 @@ export function Cat() {
         if (f.y > 260 || f.x < -40 || f.x > fw + 40) fly.current = null;
       }
 
-      if (c.pose !== 'walk' && c.pose !== 'pounce') c.x = clamp(c.x, 0, fw - W);
+      if (!seated) fly.current = null;
       if (Math.random() < dt / 4) blink.current = sec;
       hearts.current = hearts.current.filter((h) => sec - h.born < (stillRef.current ? 1 : 1.6));
-      const busy = c.pose === 'walk' || c.pose === 'pounce' || c.pose === 'crouch' || hearts.current.length || fly.current;
+      const busy = hop.current || (seated && (c.pose === 'walk' || c.pose === 'pounce' || c.pose === 'crouch')) || hearts.current.length || fly.current || settling;
       const fps = stillRef.current ? 2 : busy ? 60 : c.pose === 'curl' ? 12 : 24;
       if (now - drawn >= 1000 / fps - 4) { drawn = now; force((n) => (n + 1) % 1e6); }
       raf = requestAnimationFrame(frame);
@@ -242,39 +396,44 @@ export function Cat() {
     if (!g || settings.value.catGuided.includes(g.key)) return;
     const id = setTimeout(() => {
       const el = document.querySelector(g.sel) as HTMLElement | null;
-      const fl = floor.current;
-      const html = document.documentElement;
-      if (!el || !fl || inSession() || html.classList.contains('sheet-open') || fl.classList.contains('ducked')) return;
+      const fl = floor.current, geo = geometry();
+      if (!el || !fl || !geo || inSession() || document.documentElement.classList.contains('sheet-open')) return;
       const er = el.getBoundingClientRect();
-      const fr = fl.getBoundingClientRect();
-      const target = clamp(er.left + er.width / 2 - fr.left - W / 2, 0, fl.clientWidth - W);
+      const spot = bestSpot(allPerches(fl, geo), er.left + er.width / 2, er.top + er.height / 2, W);
+      if (!spot) return;
       updateSettings({ catGuided: [...settings.value.catGuided, g.key] });
+      moveTo(spot.p, spot.s, spot.sp, spot.cx);
       const c = st.current;
       const sec = performance.now() / 1000;
-      if (stillRef.current) Object.assign(c, { pose: 'look', x: target, targetX: null, until: sec + 6, since: sec, queue: [] });
-      else { c.queue = [{ pose: 'look', dur: 5 }]; Object.assign(c, { pose: 'walk', targetX: target, since: sec, until: Infinity }); }
+      c.queue = [];
+      Object.assign(c, { pose: 'look', targetX: null, until: sec + 6, since: sec });
     }, 1400);
     return () => clearTimeout(id);
   }, [route.value, on]);
 
-  // Never over content or buttons. The page keeps an empty strip at its very
-  // bottom for him (or a sticky button band does), so he only shows while that
-  // strip is on screen; the rest of the time he steps out of sight.
+  // Never over text or buttons: re-check his place whenever the page scrolls,
+  // resizes or changes. Mid-scroll he only ducks; he moves once you stop.
   useEffect(() => {
     if (!on) return;
-    let raf = 0;
-    const check = () => {
-      raf = 0;
-      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8;
-      setDucked(!atEnd && !document.querySelector('.sticky-next'));
-    };
-    const soon = () => { if (!raf) raf = requestAnimationFrame(check); };
-    check();
-    window.addEventListener('scroll', soon, { passive: true });
-    window.addEventListener('resize', soon);
+    let raf = 0, tm = 0, mt = 0, scrolled = -1e9;
+    const run = () => { raf = 0; measure(performance.now() - scrolled > 280); };
+    const soon = () => { if (!raf) raf = requestAnimationFrame(run); };
+    const onScroll = () => { scrolled = performance.now(); soon(); clearTimeout(tm); tm = window.setTimeout(soon, 320); };
+    // His own redraws don't count.
+    const mo = new MutationObserver((recs) => {
+      if (!mt && recs.some((r) => !floor.current?.contains(r.target))) mt = window.setTimeout(() => { mt = 0; soon(); }, 120);
+    });
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
     const ro = new ResizeObserver(soon);
     ro.observe(document.body);
-    return () => { window.removeEventListener('scroll', soon); window.removeEventListener('resize', soon); ro.disconnect(); cancelAnimationFrame(raf); };
+    const iv = setInterval(soon, 1500);
+    soon();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', soon);
+    return () => {
+      window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', soon);
+      mo.disconnect(); ro.disconnect(); clearInterval(iv); clearTimeout(tm); clearTimeout(mt); cancelAnimationFrame(raf);
+    };
   }, [on, route.value]);
 
   function pet(tap: boolean) {
@@ -335,40 +494,56 @@ export function Cat() {
   else if (pt && performance.now() - pt.at < 4000 && Math.hypot(pt.x - headX, pt.y - headY) < 220) {
     look = [clamp((pt.x - headX) / 80, -1, 1) * c.dir, clamp((pt.y - headY) / 80, -1, 1)];
   }
+  const pl = place.current;
+  const a = anim.current;
+  // Mid-hop: an arc from where he was to where he's going.
+  let ox = 0, oy = 0, pose: Pose = pl.mode === 'peek' ? 'peek' : c.pose, age = real - c.since;
+  const hp = hop.current;
+  if (hp) {
+    const e = clamp((real - hp.at) / hp.dur, 0, 1);
+    const ease = e < 0.5 ? 2 * e * e : 1 - 2 * (1 - e) * (1 - e);
+    ox = hp.ox * (1 - ease);
+    oy = hp.oy * (1 - ease) - (30 + Math.min(60, Math.abs(hp.ox) * 0.2)) * 4 * e * (1 - e);
+    pose = 'pounce';
+    age = e * 0.7;
+  }
   const blinking = !still && real - blink.current < 0.16;
   const sb = real - c.slowBlink;
   const slow = sb > 0 && sb < 1.4 ? Math.sin((sb / 1.4) * Math.PI) : 0;
 
   return (
-    <div class={`cat-floor${ducked ? ' ducked' : ''}`} ref={floor}>
-      <Bowl x={bowlX(fw)} />
-      <button
-        type="button"
-        class="cat"
-        aria-label="Pet the cat"
-        tabIndex={-1}
-        style={{ transform: `translateX(${c.x}px)` }}
-        onPointerDown={(e) => { stroke.current = { x: e.clientX, acc: 0, at: performance.now() }; pet(true); }}
-        onPointerEnter={(e) => { stroke.current = { x: e.clientX, acc: 0, at: performance.now() }; }}
-        onPointerMove={onMove as unknown as (e: Event) => void}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pet(true); } }}
-      >
-        <svg viewBox="0 0 120 90" width={W} height={W * 0.75} style={{ transform: `scaleX(${c.dir})` }} aria-hidden="true">
-          <CatBody pose={c.pose} t={sec} age={real - c.since} blink={blinking ? 1 : slow} look={look} breath={breath.current} still={still} />
-        </svg>
-      </button>
-      {fly.current && !still && <Butterfly x={fly.current.x} y={fly.current.y} t={real} />}
-      {hearts.current.map((h) => {
-        const age = real - h.born;
-        const rise = still ? 10 : Math.min(40, age * 40);
-        const fade = still ? 1 : Math.max(0, 1 - age / 1.6);
-        return (
-          <svg class="cat-heart" viewBox="0 0 20 18" aria-hidden="true" style={{ left: `${h.x}px`, bottom: `${62 + rise}px`, opacity: String(fade) }} key={h.id}>
-            <path d="M10 17s-8-5-8-10a4.2 4.2 0 0 1 8-2 4.2 4.2 0 0 1 8 2c0 5-8 10-8 10z" fill="#ec9c9c" />
+    <>
+      <div class="cat-ruler" ref={ruler} aria-hidden="true" />
+      <div class={`cat-floor${pl.el ? ' perched' : ''}${pl.mode === 'peek' ? ' peeking' : ''}`} ref={floor} style={pl.el ? { left: `${pl.left}px`, top: `${pl.top}px`, width: `${pl.width}px` } : undefined}>
+        {bowlOk.current && pl.mode === 'on' && <Bowl x={bowlX(fw)} />}
+        <button
+          type="button"
+          class={`cat${a.op < 0.3 ? ' gone' : ''}${hp ? ' hopping' : ''}`}
+          aria-label="Pet the cat"
+          tabIndex={-1}
+          style={{ transform: `translate(${c.x + ox}px, ${a.dy + oy}px) scale(${a.s})`, opacity: String(a.op) }}
+          onPointerDown={(e) => { stroke.current = { x: e.clientX, acc: 0, at: performance.now() }; pet(true); }}
+          onPointerEnter={(e) => { stroke.current = { x: e.clientX, acc: 0, at: performance.now() }; }}
+          onPointerMove={onMove as unknown as (e: Event) => void}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pet(true); } }}
+        >
+          <svg viewBox="0 0 120 90" width={W} height={W * 0.75} style={{ transform: `scaleX(${c.dir})` }} aria-hidden="true">
+            <CatBody pose={pose} t={sec} age={age} blink={blinking ? 1 : slow} look={look} breath={breath.current} still={still} />
           </svg>
-        );
-      })}
-    </div>
+        </button>
+        {fly.current && !still && <Butterfly x={fly.current.x} y={fly.current.y} t={real} />}
+        {hearts.current.map((h) => {
+          const age = real - h.born;
+          const rise = still ? 10 : Math.min(40, age * 40);
+          const fade = still ? 1 : Math.max(0, 1 - age / 1.6);
+          return (
+            <svg class="cat-heart" viewBox="0 0 20 18" aria-hidden="true" style={{ left: `${h.x}px`, bottom: `${62 + rise}px`, opacity: String(fade) }} key={h.id}>
+              <path d="M10 17s-8-5-8-10a4.2 4.2 0 0 1 8-2 4.2 4.2 0 0 1 8 2c0 5-8 10-8 10z" fill="#ec9c9c" />
+            </svg>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -602,6 +777,16 @@ export function CatBody({ pose, t, age, blink, look, breath, still }: {
       const lean = still ? 0 : Math.sin(t * 2.4) * 5;
       const quiver = still ? 0 : Math.sin(t * 30) * 0.6;
       return (<><SitBody t={t} tail={0.3 + quiver} /><FrontLegs /><Face x={65} y={33} rot={-10 + lean} eyes="happy" /></>);
+    }
+    case 'peek': {
+      // Just ears, eyes and paws over the bottom of the screen or a card's top.
+      const sleepy = breath !== 0.5; // he only breathes along during a session
+      return (
+        <>
+          <Face x={60} y={33 + Math.sin(t * 0.8) * 0.8} rot={Math.sin(t * 0.4) * 5} eyes={sleepy ? 'half' : blink > 0.5 ? 'closed' : 'open'} look={look} blink={blink} earTwitch={twitch} />
+          <Paw x={48} y={50} /><Paw x={72} y={50} />
+        </>
+      );
     }
     case 'look':
       return (<><SitBody t={t} tail={1.2} /><FrontLegs /><Face x={65} y={32} rot={-14} eyes="wide" look={look} blink={blink} /></>);
